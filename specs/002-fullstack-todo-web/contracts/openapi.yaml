@@ -1,0 +1,397 @@
+openapi: 3.1.0
+info:
+  title: Todo Web Application API
+  description: |
+    RESTful API for Phase II Full-Stack Todo Web Application.
+    All endpoints require JWT authentication via Bearer token.
+  version: 1.0.0
+  contact:
+    name: Hackathon II Team
+
+servers:
+  - url: http://localhost:8000
+    description: Development server
+  - url: https://api.todo.example.com
+    description: Production server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/tasks:
+    get:
+      operationId: listTasks
+      summary: List all tasks for authenticated user
+      description: |
+        Returns all tasks belonging to the authenticated user,
+        ordered by created_at DESC (newest first).
+      tags:
+        - Tasks
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+    post:
+      operationId: createTask
+      summary: Create a new task
+      description: |
+        Creates a new task for the authenticated user.
+        Task is initially marked as incomplete.
+      tags:
+        - Tasks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreate'
+      responses:
+        '201':
+          description: Task created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+
+    get:
+      operationId: getTask
+      summary: Get a specific task
+      description: |
+        Returns a single task by ID. Returns 404 if task
+        doesn't exist or doesn't belong to authenticated user.
+      tags:
+        - Tasks
+      responses:
+        '200':
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      operationId: updateTask
+      summary: Update a task
+      description: |
+        Updates task title and/or description.
+        Only fields provided in request body are updated.
+      tags:
+        - Tasks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdate'
+      responses:
+        '200':
+          description: Task updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      operationId: deleteTask
+      summary: Delete a task
+      description: |
+        Permanently deletes a task. Returns 404 if task
+        doesn't exist or doesn't belong to authenticated user.
+      tags:
+        - Tasks
+      responses:
+        '204':
+          description: Task deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/tasks/{taskId}/toggle:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+
+    patch:
+      operationId: toggleTask
+      summary: Toggle task completion status
+      description: |
+        Toggles the completed status of a task.
+        If incomplete, marks as complete. If complete, marks as incomplete.
+      tags:
+        - Tasks
+      responses:
+        '200':
+          description: Task toggled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/health:
+    get:
+      operationId: healthCheck
+      summary: Health check endpoint
+      description: Returns server health status and database connectivity
+      tags:
+        - System
+      security: []  # No auth required
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Server is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token from Better Auth
+
+  parameters:
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      description: UUID of the task
+      schema:
+        type: string
+        format: uuid
+        example: "550e8400-e29b-41d4-a716-446655440000"
+
+  schemas:
+    TaskCreate:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Task title (required, 1-200 characters)
+          example: "Buy groceries"
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+          description: Optional task description (max 2000 characters)
+          example: "Milk, bread, eggs"
+
+    TaskUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: New task title (optional)
+          example: "Buy groceries and supplies"
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+          description: New task description (optional)
+          example: "Milk, bread, eggs, butter"
+
+    TaskResponse:
+      type: object
+      required:
+        - id
+        - title
+        - completed
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique task identifier
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        title:
+          type: string
+          description: Task title
+          example: "Buy groceries"
+        description:
+          type: string
+          nullable: true
+          description: Task description
+          example: "Milk, bread, eggs"
+        completed:
+          type: boolean
+          description: Whether task is completed
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp (ISO 8601)
+          example: "2026-01-02T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp (ISO 8601)
+          example: "2026-01-02T10:30:00Z"
+
+    TaskListResponse:
+      type: object
+      required:
+        - tasks
+        - count
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskResponse'
+          description: List of tasks (newest first)
+        count:
+          type: integer
+          minimum: 0
+          description: Total number of tasks
+          example: 5
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - database
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          description: Overall server status
+          example: "healthy"
+        database:
+          type: string
+          enum: [connected, disconnected]
+          description: Database connection status
+          example: "connected"
+        error:
+          type: string
+          nullable: true
+          description: Error message if unhealthy
+          example: null
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Task not found"
+        detail:
+          type: string
+          nullable: true
+          description: Additional error details
+          example: "The requested task does not exist or you don't have access to it"
+
+    ValidationErrorResponse:
+      type: object
+      required:
+        - error
+        - details
+      properties:
+        error:
+          type: string
+          description: Error type
+          example: "Validation Error"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: "title"
+              message:
+                type: string
+                example: "Title is required"
+
+  responses:
+    Unauthorized:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Unauthorized"
+            detail: "Invalid or expired token"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Not Found"
+            detail: "Task not found"
+
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+          example:
+            error: "Validation Error"
+            details:
+              - field: "title"
+                message: "Title is required"
+
+    ServiceUnavailable:
+      description: Service temporarily unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Service Unavailable"
+            detail: "Database connection failed"
+
+tags:
+  - name: Tasks
+    description: Task management operations
+  - name: System
+    description: System health and monitoring

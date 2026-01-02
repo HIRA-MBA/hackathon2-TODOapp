@@ -1,0 +1,10 @@
+[project]
+name = "todo-cli"
+version = "0.1.0"
+description = "In-memory command-line todo list application"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+todo = "src.main:main"
