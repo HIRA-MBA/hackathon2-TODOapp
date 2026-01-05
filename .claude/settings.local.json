@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(md \"D:\\hackathone2\\history\\prompts\\constitution\")",
+      "Bash(if not exist \"D:\\hackathone2\\history\\prompts\\constitution\" mkdir \"D:\\hackathone2\\history\\prompts\\constitution\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File \".specify/scripts/powershell/check-prerequisites.ps1\" -Json)",
+      "Bash(git fetch:*)",
+      "Bash(powershell:*)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(curl:*)",
+      "Bash(pnpm dev:*)",
+      "Bash(.venv/Scripts/uvicorn.exe:*)",
+      "mcp__playwright__browser_navigate",
+      "Bash(cat:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs"
+    ]
+  }
+}

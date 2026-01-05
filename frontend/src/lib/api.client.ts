@@ -1,0 +1,100 @@
+import type { Task, TaskCreate, TaskUpdate, TaskListResponse, ApiError } from "./types";
+
+const API_BASE = "/api/tasks";
+
+/**
+ * API client for task operations.
+ * Per ADR-002: Uses Next.js API routes as proxy to FastAPI backend.
+ */
+class TaskApiClient {
+  private async request<T>(
+    url: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+      credentials: "include", // Include cookies for auth
+    });
+
+    if (!response.ok) {
+      const error: ApiError = await response.json().catch(() => ({
+        error: "Unknown error",
+        detail: response.statusText,
+      }));
+
+      // Handle specific error codes
+      if (response.status === 401) {
+        // Session expired or invalid
+        window.location.href = "/signin?error=session_expired";
+        throw new Error("Session expired");
+      }
+
+      throw new Error(error.detail || error.error);
+    }
+
+    // Handle 204 No Content
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    return response.json();
+  }
+
+  /**
+   * List all tasks for the current user.
+   */
+  async listTasks(): Promise<TaskListResponse> {
+    return this.request<TaskListResponse>(API_BASE);
+  }
+
+  /**
+   * Get a single task by ID.
+   */
+  async getTask(id: string): Promise<Task> {
+    return this.request<Task>(`${API_BASE}/${id}`);
+  }
+
+  /**
+   * Create a new task.
+   */
+  async createTask(data: TaskCreate): Promise<Task> {
+    return this.request<Task>(API_BASE, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Update a task.
+   */
+  async updateTask(id: string, data: TaskUpdate): Promise<Task> {
+    return this.request<Task>(`${API_BASE}/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Toggle task completion status.
+   */
+  async toggleTask(id: string): Promise<Task> {
+    return this.request<Task>(`${API_BASE}/${id}/toggle`, {
+      method: "PATCH",
+    });
+  }
+
+  /**
+   * Delete a task.
+   */
+  async deleteTask(id: string): Promise<void> {
+    return this.request<void>(`${API_BASE}/${id}`, {
+      method: "DELETE",
+    });
+  }
+}
+
+export const taskApi = new TaskApiClient();

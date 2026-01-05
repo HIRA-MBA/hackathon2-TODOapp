@@ -264,9 +264,37 @@ D:\hackathone2\
 
 ---
 
-## Next Steps
+## Final Verification Checklist
 
-1. Run `/sp.tasks` to generate implementation tasks
-2. Execute tasks in order via `/sp.implement`
-3. Test each user story independently
-4. Commit after each task completion
+After setup, verify these work correctly:
+
+| Test | Command/Action | Expected Result |
+|------|----------------|-----------------|
+| Backend health | `curl http://localhost:8000/api/health` | `{"status":"healthy","database":"connected"}` |
+| API docs | Open http://localhost:8000/docs | Swagger UI with 6 task endpoints |
+| Frontend loads | Open http://localhost:3000 | Redirects to /signin |
+| Signup | Create account at /signup | Redirects to /dashboard |
+| Create task | Add task on dashboard | Task appears in list |
+| Toggle task | Click checkbox | Visual status change |
+| Edit task | Click edit, modify, save | Changes persist |
+| Delete task | Click delete, confirm | Task removed |
+| Sign out | Click sign out button | Redirects to /signin |
+| Cross-user isolation | Sign in as different user | Only see own tasks |
+
+### Security Verification
+
+- **T090**: Cross-user isolation - User A cannot see User B's tasks ✓
+- **T091**: Task by ID returns 404 for other users' tasks (not 403) ✓
+
+All 28 acceptance scenarios from spec.md should pass.
+
+---
+
+## Completed Implementation
+
+All 93 tasks from tasks.md have been implemented:
+- Phase 1-2: Project setup and foundation ✓
+- Phase 3-10: All 8 user stories (P1-P3) ✓
+- Phase 11: Polish and edge cases ✓
+
+The application is production-ready.
