@@ -32,7 +32,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("content", sa.Text(), nullable=False),
-        sa.Column("metadata", sa.JSON(), nullable=True),
+        sa.Column("message_metadata", sa.JSON(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

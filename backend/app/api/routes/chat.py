@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from app.dependencies.auth import CurrentUser
-from app.dependencies.database import get_db
+from app.dependencies.database import get_session
 from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 async def chat(
     request: ChatRequest,
     user: CurrentUser,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_session)],
 ):
     """Process a chat message and return streaming response.
 
@@ -64,7 +64,7 @@ async def chat(
 @router.get("/history")
 async def get_history(
     user: CurrentUser,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_session)],
     limit: int = 50,
 ) -> ConversationHistoryResponse:
     """Get the user's conversation history.

@@ -90,17 +90,12 @@ class ChatService:
             # 4. Build system prompt with task context
             system_prompt = build_system_prompt(tasks)
 
-            # 5. Build conversation history for agent
-            history = []
+            # 5. Build conversation history as context string
+            history_text = ""
             for msg in recent_messages:
-                if msg.role == MessageRole.USER:
-                    history.append({"role": "user", "content": msg.content})
-                elif msg.role == MessageRole.ASSISTANT:
-                    history.append({"role": "assistant", "content": msg.content})
-                # Tool messages are handled differently in OpenAI API
-
-            # Add current message
-            history.append({"role": "user", "content": message})
+                role_label = msg.role.upper() if isinstance(msg.role, str) else msg.role.value.upper()
+                if role_label in ("USER", "ASSISTANT"):
+                    history_text += f"{role_label}: {msg.content}\n"
 
             # 6. Create user context for tools
             ctx = UserContext(user_id=user_id, email=email, db=self.db)
@@ -109,13 +104,27 @@ class ChatService:
             tool_executions: list[ToolExecution] = []
             response_content = ""
 
+            # Build full input with task context and history
+            input_parts = []
+
+            # Add task context
+            input_parts.append(f"CONTEXT:\n{system_prompt}")
+
+            # Add conversation history if available
+            if history_text:
+                input_parts.append(f"\nPREVIOUS CONVERSATION:\n{history_text}")
+
+            # Add current message
+            input_parts.append(f"\nUSER REQUEST: {message}")
+
+            full_input = "\n".join(input_parts)
+
             try:
                 # Use the agent with streaming
                 result = await Runner.run(
-                    todo_agent,
-                    messages=history,
+                    starting_agent=todo_agent,
+                    input=full_input,
                     context=ctx,
-                    instructions=system_prompt,
                 )
 
                 # Process the result
@@ -219,7 +228,7 @@ class ChatService:
         return str(conversation.id), [
             {
                 "id": str(msg.id),
-                "role": msg.role.value,
+                "role": msg.role if isinstance(msg.role, str) else msg.role.value,
                 "content": msg.content,
                 "created_at": msg.created_at.isoformat(),
             }

@@ -3,6 +3,7 @@ from enum import Enum
 from uuid import UUID, uuid4
 from typing import Any
 from sqlmodel import SQLModel, Field, Column, JSON
+from sqlalchemy import String
 
 
 class MessageRole(str, Enum):
@@ -30,7 +31,7 @@ class Message(SQLModel, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     conversation_id: UUID = Field(foreign_key="conversation.id", nullable=False, index=True)
-    role: MessageRole = Field(nullable=False)
+    role: str = Field(sa_column=Column(String(20), nullable=False))
     content: str = Field(nullable=False)
-    metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    message_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=datetime.utcnow)

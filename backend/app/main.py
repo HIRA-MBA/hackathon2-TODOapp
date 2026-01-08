@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,6 +9,10 @@ from app.config.database import close_db
 from app.api.routes import router
 
 settings = get_settings()
+
+# Set OpenAI API key in environment for the agents SDK
+if settings.openai_api_key:
+    os.environ["OPENAI_API_KEY"] = settings.openai_api_key
 
 
 @asynccontextmanager
