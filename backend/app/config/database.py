@@ -51,10 +51,13 @@ def _prepare_async_database_url(url: str) -> tuple[str, dict]:
 
 
 # Prepare URL and SSL config for asyncpg
-_database_url, _connect_args = _prepare_async_database_url(settings.database_url)
+    _database_url, _connect_args = _prepare_async_database_url(settings.database_url)
 
-# Create async engine for Neon PostgreSQL
-# Using NullPool since Neon handles connection pooling on their end (transaction pooling)
+# Ensure the database URL uses the asyncpg driver
+if not _database_url.startswith("postgresql+asyncpg://"):
+    _database_url = _database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+# Create async engine for Neon PostgreSQL# Using NullPool since Neon handles connection pooling on their end (transaction pooling)
 # This is the recommended approach for serverless PostgreSQL providers
 engine = create_async_engine(
     _database_url,
