@@ -7,7 +7,7 @@ import { TaskForm } from "@/components/tasks/task-form";
 import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
 import { Navbar } from "@/components/navbar";
 import { Button } from "@/components/ui/button";
-import type { Task } from "@/lib/types";
+import type { Task, TaskCreate } from "@/lib/types";
 
 type FilterType = "all" | "active" | "completed";
 
@@ -57,7 +57,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleTaskCreated = async (data: { title: string; description: string | null }) => {
+  const handleTaskCreated = async (data: TaskCreate) => {
     const result = await createTask(data);
     if (result) {
       setShowAddForm(false);

@@ -1,8 +1,14 @@
 {
-  "/api/auth/[...auth]/route": "app/api/auth/[...auth]/route.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/chat/history/route": "app/api/chat/history/route.js",
   "/api/chat/route": "app/api/chat/route.js",
+  "/api/tasks/[id]/route": "app/api/tasks/[id]/route.js",
+  "/api/tasks/[id]/toggle/route": "app/api/tasks/[id]/toggle/route.js",
   "/api/tasks/route": "app/api/tasks/route.js",
-  "/(protected)/dashboard/page": "app/(protected)/dashboard/page.js",
+  "/api/auth/[...auth]/route": "app/api/auth/[...auth]/route.js",
+  "/page": "app/page.js",
+  "/(auth)/signup/page": "app/(auth)/signup/page.js",
   "/(auth)/signin/page": "app/(auth)/signin/page.js",
+  "/(protected)/dashboard/page": "app/(protected)/dashboard/page.js",
   "/(protected)/chat/page": "app/(protected)/chat/page.js"
 }

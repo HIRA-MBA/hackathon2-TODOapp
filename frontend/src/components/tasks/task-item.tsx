@@ -80,10 +80,10 @@ export function TaskItem({ task, onToggle, onEdit, onDelete }: TaskItemProps) {
 
         {/* Timestamp */}
         <p className="mt-2 text-xs text-gray-400">
-          {task.completed ? "Completed" : "Created"} {new Date(task.created_at).toLocaleDateString(undefined, {
+          {task.completed ? "Completed" : "Created"} {new Date(task.createdAt).toLocaleDateString(undefined, {
             month: "short",
             day: "numeric",
-            year: task.created_at.startsWith(new Date().getFullYear().toString()) ? undefined : "numeric"
+            year: task.createdAt.startsWith(new Date().getFullYear().toString()) ? undefined : "numeric"
           })}
         </p>
       </div>

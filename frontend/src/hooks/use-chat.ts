@@ -166,7 +166,7 @@ export function useChat(): UseChatReturn {
                           ...msg,
                           content: event.result || "",
                           toolInfo: {
-                            tool: event.tool,
+                            tool: event.tool!,
                             status: event.status || "completed",
                             result: event.result,
                           },
