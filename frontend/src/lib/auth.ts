@@ -9,7 +9,16 @@ import { Pool } from "pg";
  *
  * JWT plugin enables token-based auth for backend API verification.
  */
+const authBaseURL =
+  process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
+
+if (!authBaseURL) {
+  throw new Error(
+    "Missing required environment variable: NEXT_PUBLIC_BETTER_AUTH_URL"
+  );
+}
 export const auth = betterAuth({
+  baseURL: authBaseURL,
   // Database connection for user storage
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -54,8 +63,8 @@ export const auth = betterAuth({
         expirationTime: "1h",
         // Use symmetric signing with shared secret (HS256)
         // Backend will verify using same BETTER_AUTH_SECRET
-        issuer: process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "http://localhost:3001",
-        audience: process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "http://localhost:3001",
+        issuer: authBaseURL,
+        audience: authBaseURL,
       },
     }),
   ],
