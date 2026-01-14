@@ -7,15 +7,11 @@ import { jwtClient } from "better-auth/client/plugins";
  *
  * JWT client plugin enables token retrieval for backend API calls.
  */
+// Always use current origin in browser to avoid CORS issues with different deployments
 const authBaseURL =
-  process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
-  (typeof window !== "undefined" ? window.location.origin : "");
-
-if (!authBaseURL) {
-  throw new Error(
-    "Missing required environment variable: NEXT_PUBLIC_BETTER_AUTH_URL"
-  );
-}
+  typeof window !== "undefined"
+    ? window.location.origin
+    : process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "";
 
 export const authClient = createAuthClient({
   baseURL: authBaseURL,
