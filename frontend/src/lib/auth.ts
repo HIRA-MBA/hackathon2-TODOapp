@@ -9,14 +9,16 @@ import { Pool } from "pg";
  *
  * JWT plugin enables token-based auth for backend API verification.
  */
-const authBaseURL =
-  process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
-
-if (!authBaseURL) {
-  throw new Error(
-    "Missing required environment variable: NEXT_PUBLIC_BETTER_AUTH_URL"
-  );
+function getBaseURL(): string {
+  // In production on Vercel, use the deployment URL
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  // Fallback to env variable or localhost
+  return process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "http://localhost:3000";
 }
+
+const authBaseURL = getBaseURL();
 export const auth = betterAuth({
   baseURL: authBaseURL,
   // Database connection for user storage
@@ -46,6 +48,12 @@ export const auth = betterAuth({
       maxAge: 60 * 5, // 5 minutes
     },
   },
+
+  // Trusted origins for CORS/CSRF protection
+  trustedOrigins: [
+    "http://localhost:3000",
+    "https://*.vercel.app",
+  ],
 
   // Cookie configuration
   advanced: {
