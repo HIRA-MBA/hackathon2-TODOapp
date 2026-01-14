@@ -1,7 +1,13 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+def to_camel(string: str) -> str:
+    """Convert snake_case to camelCase."""
+    components = string.split("_")
+    return components[0] + "".join(x.title() for x in components[1:])
 
 
 class TaskCreate(BaseModel):
@@ -27,15 +33,19 @@ class TaskUpdate(BaseModel):
 class TaskResponse(BaseModel):
     """Response schema for a single task."""
 
+    model_config = ConfigDict(
+        from_attributes=True,
+        alias_generator=to_camel,
+        populate_by_name=True,
+        ser_json_by_alias=True,
+    )
+
     id: UUID
     title: str
     description: str | None
     completed: bool
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class TaskListResponse(BaseModel):
