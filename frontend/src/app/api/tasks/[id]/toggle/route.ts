@@ -1,7 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getJwtToken } from "@/lib/auth.utils";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+import { SignJWT } from "jose";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
+const SECRET = new TextEncoder().encode(process.env.BETTER_AUTH_SECRET);
+
+async function createToken(userId: string): Promise<string> {
+  return new SignJWT({ sub: userId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(SECRET);
+}
+
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const headersList = await headers();
+    const session = await auth.api.getSession({ headers: headersList });
+    if (!session?.user?.id) return null;
+    return createToken(session.user.id);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * API route proxy for task toggle operation.
@@ -14,8 +36,8 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const token = await getJwtToken();
-    
+    const token = await getAuthToken();
+
     if (!token) {
       return NextResponse.json(
         { error: "Unauthorized", detail: "Not authenticated" },
