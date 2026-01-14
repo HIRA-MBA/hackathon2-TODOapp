@@ -37,7 +37,8 @@ export async function getJwtToken(): Promise<string | null> {
     const cookieHeader = allCookies.map((c) => `${c.name}=${c.value}`).join("; ");
 
     if (cookieHeader) {
-      const response = await fetch("http://localhost:3000/api/auth/token", {
+      const baseUrl = process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "http://localhost:3000";
+      const response = await fetch(`${baseUrl}/api/auth/token`, {
         headers: { Cookie: cookieHeader },
         cache: "no-store",
       });
