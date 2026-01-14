@@ -7,7 +7,9 @@ import { jwtClient } from "better-auth/client/plugins";
  *
  * JWT client plugin enables token retrieval for backend API calls.
  */
-const authBaseURL = process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
+const authBaseURL =
+  process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
+  (typeof window !== "undefined" ? window.location.origin : "");
 
 if (!authBaseURL) {
   throw new Error(
