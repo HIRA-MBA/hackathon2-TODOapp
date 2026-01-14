@@ -51,7 +51,7 @@ def _prepare_async_database_url(url: str) -> tuple[str, dict]:
 
 
 # Prepare URL and SSL config for asyncpg
-    _database_url, _connect_args = _prepare_async_database_url(settings.database_url)
+_database_url, _connect_args = _prepare_async_database_url(settings.database_url)
 
 # Ensure the database URL uses the asyncpg driver
 if not _database_url.startswith("postgresql+asyncpg://"):
