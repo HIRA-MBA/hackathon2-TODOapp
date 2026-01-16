@@ -211,9 +211,19 @@ async def delete_task(task_id: str) -> str:
             return f"Invalid task ID: {task_id}"
 
 
+# Create the http_app once so we can share its lifespan
+_mcp_http_app = None
+
+
+def get_mcp_http_app():
+    """Get or create the MCP HTTP app (singleton)."""
+    global _mcp_http_app
+    if _mcp_http_app is None:
+        _mcp_http_app = mcp.http_app()
+    return _mcp_http_app
+
+
 def create_mcp_app():
     """Create MCP app with auth middleware."""
-    app = mcp.http_app()
-    # Temporarily bypass auth for debugging
-    # return AuthMiddleware(app)
-    return app
+    # Use the singleton http_app
+    return AuthMiddleware(get_mcp_http_app())

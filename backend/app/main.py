@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import get_settings
 from app.config.database import close_db
 from app.api.routes import router
+from app.mcp.server import create_mcp_app, get_mcp_http_app
 
 settings = get_settings()
 
@@ -14,12 +15,17 @@ settings = get_settings()
 if settings.openai_api_key:
     os.environ["OPENAI_API_KEY"] = settings.openai_api_key
 
+# Create MCP app first to get its lifespan
+mcp_app = create_mcp_app()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage application lifespan events."""
-    # Startup
-    yield
+    """Manage application lifespan events including MCP server."""
+    # Use the singleton MCP http_app's lifespan
+    mcp_http_app = get_mcp_http_app()
+    async with mcp_http_app.lifespan(mcp_http_app):
+        yield
     # Shutdown
     await close_db()
 
@@ -45,5 +51,5 @@ app.add_middleware(
 app.include_router(router, prefix="/api")
 
 # Mount MCP server for ChatKit (with auth middleware)
-from app.mcp.server import create_mcp_app
-app.mount("/mcp", create_mcp_app())
+# FastMCP creates routes at /mcp internally, so mount at root
+app.mount("", mcp_app)
