@@ -32,7 +32,15 @@ mcp = FastMCP(
 )
 
 
-def verify_token(token: str) -> str | None:
+def verify_api_key(token: str) -> bool:
+    """Verify if token matches the MCP API key."""
+    if not settings.mcp_api_key:
+        # No API key configured, allow all requests
+        return True
+    return token == settings.mcp_api_key
+
+
+def verify_jwt(token: str) -> str | None:
     """Verify JWT and return user_id (sub claim) or None if invalid."""
     try:
         # Try HS256 with shared secret (Better Auth default)
@@ -52,27 +60,49 @@ def verify_token(token: str) -> str | None:
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Middleware to extract user_id from JWT in Authorization header."""
+    """Middleware to verify API key and extract user_id from JWT."""
 
     async def dispatch(self, request: Request, call_next):
-        user_id = "anonymous"
+        user_id = "chatkit-user"  # Default user for ChatKit/OpenAI Agents
 
         # Check Authorization header
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
-            extracted_id = verify_token(token)
-            if extracted_id:
-                user_id = extracted_id
-                logger.info(f"MCP auth: Authenticated user {user_id}")
+
+            # First check if it's the MCP API key (from OpenAI Agents)
+            if verify_api_key(token):
+                logger.info("MCP auth: Valid API key, using chatkit-user")
+                # API key is valid, continue with default chatkit-user
+            else:
+                # Try JWT verification for user-specific auth
+                extracted_id = verify_jwt(token)
+                if extracted_id:
+                    user_id = extracted_id
+                    logger.info(f"MCP auth: JWT authenticated user {user_id}")
+                elif settings.mcp_api_key:
+                    # API key is configured but token didn't match, reject
+                    logger.warning("MCP auth: Invalid token")
+                    return JSONResponse(
+                        status_code=401,
+                        content={"error": "Invalid authentication token"}
+                    )
+
+        elif settings.mcp_api_key:
+            # No auth header but API key is required
+            logger.warning("MCP auth: Missing authentication")
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Authentication required"}
+            )
 
         # Set context variable for tools to access
-        token = current_user_id.set(user_id)
+        ctx_token = current_user_id.set(user_id)
         try:
             response = await call_next(request)
             return response
         finally:
-            current_user_id.reset(token)
+            current_user_id.reset(ctx_token)
 
 
 def get_user_id() -> str:
