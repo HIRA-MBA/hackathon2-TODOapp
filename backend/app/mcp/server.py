@@ -1,7 +1,7 @@
 """FastMCP server for ChatKit integration.
 
 Exposes task operations as MCP tools, reusing TaskService for all CRUD.
-Supports JWT authentication via Authorization header or user_token parameter.
+Supports JWT authentication via Authorization header.
 """
 
 import logging
@@ -11,9 +11,9 @@ from uuid import UUID
 
 import jwt
 from fastmcp import FastMCP
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
+from starlette.applications import Starlette
 from starlette.responses import JSONResponse
+from starlette.routing import Mount
 
 from app.config.database import async_session_maker
 from app.config.settings import get_settings
@@ -43,7 +43,6 @@ def verify_api_key(token: str) -> bool:
 def verify_jwt(token: str) -> str | None:
     """Verify JWT and return user_id (sub claim) or None if invalid."""
     try:
-        # Try HS256 with shared secret (Better Auth default)
         payload = jwt.decode(
             token,
             settings.better_auth_secret,
@@ -59,48 +58,54 @@ def verify_jwt(token: str) -> str | None:
         return None
 
 
-class AuthMiddleware(BaseHTTPMiddleware):
-    """Middleware to verify API key and extract user_id from JWT."""
+class AuthMiddleware:
+    """Pure ASGI middleware to verify API key and extract user_id."""
 
-    async def dispatch(self, request: Request, call_next):
-        user_id = "chatkit-user"  # Default user for ChatKit/OpenAI Agents
+    def __init__(self, app):
+        self.app = app
 
-        # Check Authorization header
-        auth_header = request.headers.get("Authorization", "")
+    async def __call__(self, scope, receive, send):
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+
+        # Extract headers
+        headers = dict(scope.get("headers", []))
+        auth_header = headers.get(b"authorization", b"").decode()
+
+        user_id = "chatkit-user"
+
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
 
-            # First check if it's the MCP API key (from OpenAI Agents)
             if verify_api_key(token):
-                logger.info("MCP auth: Valid API key, using chatkit-user")
-                # API key is valid, continue with default chatkit-user
+                logger.info("MCP auth: Valid API key")
             else:
-                # Try JWT verification for user-specific auth
                 extracted_id = verify_jwt(token)
                 if extracted_id:
                     user_id = extracted_id
-                    logger.info(f"MCP auth: JWT authenticated user {user_id}")
+                    logger.info(f"MCP auth: JWT user {user_id}")
                 elif settings.mcp_api_key:
-                    # API key is configured but token didn't match, reject
-                    logger.warning("MCP auth: Invalid token")
-                    return JSONResponse(
+                    # Invalid token, reject
+                    response = JSONResponse(
                         status_code=401,
                         content={"error": "Invalid authentication token"}
                     )
-
+                    await response(scope, receive, send)
+                    return
         elif settings.mcp_api_key:
-            # No auth header but API key is required
-            logger.warning("MCP auth: Missing authentication")
-            return JSONResponse(
+            # No auth but required
+            response = JSONResponse(
                 status_code=401,
                 content={"error": "Authentication required"}
             )
+            await response(scope, receive, send)
+            return
 
-        # Set context variable for tools to access
+        # Set context and proceed
         ctx_token = current_user_id.set(user_id)
         try:
-            response = await call_next(request)
-            return response
+            await self.app(scope, receive, send)
         finally:
             current_user_id.reset(ctx_token)
 
@@ -209,5 +214,4 @@ async def delete_task(task_id: str) -> str:
 def create_mcp_app():
     """Create MCP app with auth middleware."""
     app = mcp.http_app()
-    app.add_middleware(AuthMiddleware)
-    return app
+    return AuthMiddleware(app)
