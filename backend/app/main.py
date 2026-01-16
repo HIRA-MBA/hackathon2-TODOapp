@@ -43,3 +43,7 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(router, prefix="/api")
+
+# Mount MCP server for ChatKit
+from app.mcp import mcp
+app.mount("/mcp", mcp.http_app())
