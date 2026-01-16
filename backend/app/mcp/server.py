@@ -59,14 +59,11 @@ def verify_jwt(token: str) -> str | None:
 
 
 class AuthMiddleware:
-    """Pure ASGI middleware to verify API key and extract user_id.
+    """Pure ASGI middleware to extract user_id from auth header.
 
-    Allows MCP discovery (initialize, tools/list) without auth.
-    Requires auth only for tool execution (tools/call).
+    Does NOT block requests - just extracts user context for tools.
+    Auth validation happens at tool execution time if needed.
     """
-
-    # MCP methods that don't require authentication
-    PUBLIC_METHODS = {"initialize", "tools/list", "ping"}
 
     def __init__(self, app):
         self.app = app
@@ -76,18 +73,14 @@ class AuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Extract headers
+        # Extract user_id from auth header (non-blocking)
         headers = dict(scope.get("headers", []))
         auth_header = headers.get(b"authorization", b"").decode()
-
-        # Check if this is a public MCP method (read body for JSON-RPC)
-        is_public = await self._is_public_method(scope, receive)
 
         user_id = "chatkit-user"
 
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
-
             if verify_api_key(token):
                 logger.info("MCP auth: Valid API key")
             else:
@@ -95,73 +88,13 @@ class AuthMiddleware:
                 if extracted_id:
                     user_id = extracted_id
                     logger.info(f"MCP auth: JWT user {user_id}")
-                elif settings.mcp_api_key and not is_public:
-                    response = JSONResponse(
-                        status_code=401,
-                        content={"error": "Invalid authentication token"}
-                    )
-                    await response(scope, receive, send)
-                    return
-        elif settings.mcp_api_key and not is_public:
-            response = JSONResponse(
-                status_code=401,
-                content={"error": "Authentication required"}
-            )
-            await response(scope, receive, send)
-            return
 
-        # Set context and proceed (use wrapped receive if body was read)
+        # Set context and proceed - no blocking
         ctx_token = current_user_id.set(user_id)
         try:
-            actual_receive = scope.get("_wrapped_receive", receive)
-            await self.app(scope, actual_receive, send)
+            await self.app(scope, receive, send)
         finally:
             current_user_id.reset(ctx_token)
-
-    async def _is_public_method(self, scope, receive) -> bool:
-        """Check if request is a public MCP method by inspecting JSON-RPC body."""
-        import json
-
-        # GET/HEAD/OPTIONS are public (SSE, health, CORS preflight)
-        method = scope.get("method", "GET")
-        if method in ("GET", "HEAD", "OPTIONS"):
-            return True
-
-        # For POST, check JSON-RPC method
-        if method == "POST":
-            body, wrapped_receive = await self._read_and_wrap_body(receive)
-            scope["_wrapped_receive"] = wrapped_receive
-            try:
-                data = json.loads(body) if body else {}
-                rpc_method = data.get("method", "")
-                return rpc_method in self.PUBLIC_METHODS
-            except (json.JSONDecodeError, AttributeError):
-                return False
-        return False
-
-    async def _read_and_wrap_body(self, receive):
-        """Read body and return wrapped receive that replays it."""
-        body_parts = []
-        while True:
-            message = await receive()
-            body = message.get("body", b"")
-            if body:
-                body_parts.append(body)
-            if not message.get("more_body", False):
-                break
-
-        full_body = b"".join(body_parts)
-
-        # Create receive wrapper that replays the body
-        body_sent = False
-        async def wrapped_receive():
-            nonlocal body_sent
-            if not body_sent:
-                body_sent = True
-                return {"type": "http.request", "body": full_body, "more_body": False}
-            return {"type": "http.request", "body": b"", "more_body": False}
-
-        return full_body, wrapped_receive
 
 
 def get_user_id() -> str:
