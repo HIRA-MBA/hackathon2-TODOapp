@@ -54,7 +54,6 @@ export function ChatKitContainer() {
         }
       },
     },
-    domainKey: domainKey,
     theme: "light",
     startScreen: {
       greeting: "How can I help with your tasks?",
@@ -124,7 +123,7 @@ export function ChatKitContainer() {
           Debug: {debug}
         </div>
       )}
-      <ChatKit control={control} style={{ height: "100%", width: "100%" }} />
+      <ChatKit control={control} domainKey={domainKey} style={{ height: "100%", width: "100%" }} />
     </div>
   );
 }
