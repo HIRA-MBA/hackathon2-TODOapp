@@ -27,6 +27,7 @@ export function ChatKitContainer() {
 
   const { control } = useChatKit({
     api: {
+      domainKey: domainKey,
       async getClientSecret(currentSecret) {
         console.log("ChatKit: Fetching client secret...");
         setDebug("Fetching session...");
@@ -123,7 +124,7 @@ export function ChatKitContainer() {
           Debug: {debug}
         </div>
       )}
-      <ChatKit control={control} domainKey={domainKey} style={{ height: "100%", width: "100%" }} />
+      <ChatKit control={control} style={{ height: "100%", width: "100%" }} />
     </div>
   );
 }
