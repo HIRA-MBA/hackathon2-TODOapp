@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "OpenAI-Beta": "chatkit_beta=v1",
       },
       body: JSON.stringify({
         workflow: { id: WORKFLOW_ID },
@@ -46,10 +47,18 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error("OpenAI ChatKit error:", error);
+      const errorText = await response.text();
+      console.error("OpenAI ChatKit error:", response.status, errorText);
+      // Parse error for better message
+      let errorMessage = `ChatKit API error: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error?.message || errorMessage;
+      } catch {
+        // Use default message
+      }
       return NextResponse.json(
-        { error: `ChatKit API error: ${response.status}` },
+        { error: errorMessage },
         { status: response.status }
       );
     }
