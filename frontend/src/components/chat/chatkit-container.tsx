@@ -91,17 +91,17 @@ export function ChatKitContainer() {
   }
 
   return (
-    <div className="flex-1 flex flex-col" style={{ minHeight: "500px" }}>
-      <div className="bg-blue-50 border-b border-blue-200 px-4 py-1 text-xs text-blue-700">
+    <div className="flex-1 flex flex-col w-full h-full">
+      <div className="bg-blue-50 border-b border-blue-200 px-4 py-1 text-xs text-blue-700 shrink-0">
         ChatKit loaded | Domain: {hostname}
       </div>
       {debug && (
-        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 text-sm text-yellow-800">
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 text-sm text-yellow-800 shrink-0">
           Debug: {debug}
         </div>
       )}
-      <div className="flex-1" style={{ minHeight: "400px" }}>
-        <ChatKit control={control} style={{ height: "100%", width: "100%" }} />
+      <div className="flex-1 min-h-0 relative">
+        <ChatKit control={control} className="absolute inset-0" />
       </div>
     </div>
   );
