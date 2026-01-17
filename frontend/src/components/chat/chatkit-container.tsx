@@ -90,18 +90,21 @@ export function ChatKitContainer() {
     );
   }
 
+  // Use calc to account for navbar (~64px) + toggle header (~45px) + debug bar (~25px)
+  const chatKitHeight = "calc(100vh - 140px)";
+
   return (
-    <div className="flex-1 flex flex-col w-full h-full">
-      <div className="bg-blue-50 border-b border-blue-200 px-4 py-1 text-xs text-blue-700 shrink-0">
+    <div className="flex-1 flex flex-col w-full">
+      <div className="bg-blue-50 border-b border-blue-200 px-4 py-1 text-xs text-blue-700">
         ChatKit loaded | Domain: {hostname}
       </div>
       {debug && (
-        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 text-sm text-yellow-800 shrink-0">
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 text-sm text-yellow-800">
           Debug: {debug}
         </div>
       )}
-      <div className="flex-1 min-h-0 relative">
-        <ChatKit control={control} className="absolute inset-0" />
+      <div style={{ height: chatKitHeight, width: "100%" }}>
+        <ChatKit control={control} style={{ height: "100%", width: "100%" }} />
       </div>
     </div>
   );
