@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # MCP Server API Key (for OpenAI Agents authentication)
     mcp_api_key: str = ""
 
+    # OpenAI ChatKit Workflow ID
+    openai_chatkit_workflow_id: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS origins from comma-separated string."""

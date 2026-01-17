@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: todo-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: BETTER_AUTH_SECRET
+        sync: false
+      - key: BETTER_AUTH_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: MCP_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.13"

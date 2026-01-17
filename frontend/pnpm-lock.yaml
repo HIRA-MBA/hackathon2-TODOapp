@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@openai/chatkit-react':
+        specifier: ^1.4.1
+        version: 1.4.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       better-auth:
         specifier: ^1.1.10
         version: 1.4.10(@prisma/client@5.22.0)(better-sqlite3@12.5.0)(drizzle-orm@0.33.0(@prisma/client@5.22.0)(@types/pg@8.16.0)(@types/react@19.2.7)(better-sqlite3@12.5.0)(kysely@0.28.9)(pg@8.16.3)(react@19.2.3))(next@15.5.9(@babel/core@7.28.5)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(pg@8.16.3)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -493,6 +496,15 @@ packages:
   '@nodelib/fs.walk@1.2.8':
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
+
+  '@openai/chatkit-react@1.4.1':
+    resolution: {integrity: sha512-/PvaID18iCh1cbcJTuJDzfMAAHTZ/yDdQAIL/es6D7Wju8xjjnojEy1u/N8AdWs+65Hz3YfIoeOQ5/lD2n2VpQ==}
+    peerDependencies:
+      react: '>=18'
+      react-dom: '>=18'
+
+  '@openai/chatkit@1.3.0':
+    resolution: {integrity: sha512-b/0UmnUAvTX7Zi3juAt4+FPGVMCguFlkR7+VccvEHl1vHXM3HjN4FNMr4LEMXg4nWp0t3i+1Hi2FXIiZesO0JA==}
 
   '@prisma/client@5.22.0':
     resolution: {integrity: sha512-M0SVXfyHnQREBKxCgyo7sffrKttwE6R8PMq330MIUF0pTwjUhLbW84pFDlf06B27XyCR++VtjugEnIHdr07SVA==}
@@ -1994,6 +2006,14 @@ snapshots:
     dependencies:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
+
+  '@openai/chatkit-react@1.4.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
+    dependencies:
+      '@openai/chatkit': 1.3.0
+      react: 19.2.3
+      react-dom: 19.2.3(react@19.2.3)
+
+  '@openai/chatkit@1.3.0': {}
 
   '@prisma/client@5.22.0': {}
 

@@ -1,5 +1,5 @@
 import { Navbar } from "@/components/navbar";
-import { ChatContainer } from "@/components/chat/chat-container";
+import { ChatPageContent } from "@/components/chat/chat-page-content";
 
 export const metadata = {
   title: "Chat - Todo App",
@@ -8,7 +8,7 @@ export const metadata = {
 
 /**
  * Chat page with AI-powered task management.
- * Per spec US1-US5: Natural language task operations.
+ * Supports both custom (openai-agents) and ChatKit modes.
  */
 export default function ChatPage() {
   return (
@@ -17,7 +17,7 @@ export default function ChatPage() {
 
       {/* Chat area - takes remaining height */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        <ChatContainer />
+        <ChatPageContent />
       </main>
     </div>
   );

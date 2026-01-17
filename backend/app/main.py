@@ -50,6 +50,12 @@ app.add_middleware(
 # Include API routes
 app.include_router(router, prefix="/api")
 
+# Root health check endpoint
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "Todo API is running"}
+
+
 # Mount MCP server for ChatKit (with auth middleware)
 # FastMCP creates routes at /mcp internally, so mount at root
 app.mount("", mcp_app)
