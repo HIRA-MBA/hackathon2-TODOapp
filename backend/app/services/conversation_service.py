@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import UUID
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import Conversation
@@ -102,7 +102,7 @@ class ConversationService:
             conversation_id=conversation_id,
             role=role,
             content=content,
-            metadata=metadata,
+            message_metadata=metadata,
         )
         self.session.add(message)
         await self.session.flush()
@@ -121,3 +121,20 @@ class ConversationService:
             .values(last_activity_at=datetime.utcnow())
         )
         await self.session.execute(stmt)
+
+    async def clear_messages(self, conversation_id: UUID) -> int:
+        """Delete all messages from a conversation.
+
+        Per spec FR-029: System MUST provide a "Clear history" function that
+        deletes all messages from the user's conversation while preserving
+        the conversation container.
+
+        Args:
+            conversation_id: The conversation UUID.
+
+        Returns:
+            Number of messages deleted.
+        """
+        stmt = delete(Message).where(Message.conversation_id == conversation_id)
+        result = await self.session.execute(stmt)
+        return result.rowcount

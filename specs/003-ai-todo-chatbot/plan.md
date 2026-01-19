@@ -40,7 +40,7 @@ Implement an AI-powered chatbot that enables natural language task management th
 | Database | Neon PostgreSQL | Neon PostgreSQL | ✅ |
 | AI Orchestration | OpenAI Agents SDK | OpenAI Agents SDK | ✅ |
 | AI Tools | MCP SDK | function_tool decorator | ✅ |
-| Frontend | Next.js 16+ | Next.js 15 | ✅ |
+| Frontend | Next.js 16+ | Next.js 15.x (upgrade pending) | ⚠️ |
 | Auth | Better Auth JWT | Reuse Phase 2 | ✅ |
 
 ## Project Structure

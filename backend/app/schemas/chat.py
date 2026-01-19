@@ -65,3 +65,13 @@ class ConversationHistoryResponse(BaseModel):
 
     conversation_id: str
     messages: list[MessageResponse]
+
+
+class ClearHistoryResponse(BaseModel):
+    """Response body for clear history endpoint.
+
+    Per spec FR-029: Clear history function.
+    """
+
+    message: str
+    messages_deleted: int

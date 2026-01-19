@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { TaskCreate, Task } from "@/lib/types";
+import type { TaskCreate, Task, Priority } from "@/lib/types";
 
 interface TaskFormProps {
   onSubmit: (data: TaskCreate) => Promise<Task | null>;
@@ -12,14 +12,17 @@ interface TaskFormProps {
 
 /**
  * Form for creating new tasks.
- * Per spec US4: Create a New Task with title and optional description.
+ * Per spec US4: Create a New Task with title, optional description, priority, and due date.
  */
 export function TaskForm({ onSubmit, onCancel }: TaskFormProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState<Priority>("medium");
+  const [dueDate, setDueDate] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -51,13 +54,18 @@ export function TaskForm({ onSubmit, onCancel }: TaskFormProps) {
       const task = await onSubmit({
         title: title.trim(),
         description: description.trim() || null,
+        priority,
+        dueDate: dueDate || null,
       });
 
       if (task) {
         setTitle("");
         setDescription("");
+        setPriority("medium");
+        setDueDate("");
         setErrors({});
         setShowDescription(false);
+        setShowAdvanced(false);
       }
     } finally {
       setIsLoading(false);
@@ -67,8 +75,11 @@ export function TaskForm({ onSubmit, onCancel }: TaskFormProps) {
   const handleCancel = () => {
     setTitle("");
     setDescription("");
+    setPriority("medium");
+    setDueDate("");
     setErrors({});
     setShowDescription(false);
+    setShowAdvanced(false);
     onCancel?.();
   };
 
@@ -141,6 +152,56 @@ export function TaskForm({ onSubmit, onCancel }: TaskFormProps) {
             {errors.description && (
               <p className="mt-1 text-sm text-red-600">{errors.description}</p>
             )}
+          </div>
+        )}
+
+        {/* Priority and Due Date */}
+        {!showAdvanced ? (
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(true)}
+            className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add priority & due date
+          </button>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor="priority"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Priority
+              </label>
+              <select
+                id="priority"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as Priority)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="dueDate"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Due Date
+              </label>
+              <input
+                type="date"
+                id="dueDate"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
           </div>
         )}
 

@@ -40,7 +40,7 @@ A user wants to add a new task by simply describing it in natural language, with
 
 1. **Given** an authenticated user with an active conversation, **When** they send "Add buy groceries", **Then** the system creates a new task with title "buy groceries" and confirms the action in the response.
 
-2. **Given** an authenticated user, **When** they send "Remind me to call mom tomorrow", **Then** the system creates a task with appropriate title and acknowledges with the task details.
+2. **Given** an authenticated user, **When** they send "Remind me to call mom tomorrow", **Then** the system creates a task with title "call mom" and due date set to tomorrow, and acknowledges with the task details including the due date.
 
 3. **Given** an authenticated user, **When** they send an ambiguous message like "groceries", **Then** the system asks for clarification before creating a task.
 
@@ -121,6 +121,8 @@ A user expects the chatbot to remember the context of their conversation within 
 - How does the system handle very long messages? Messages are truncated at a reasonable limit (2000 characters) with notification.
 - What happens when a user tries to access another user's tasks? JWT validation prevents cross-user access; request is rejected with authentication error.
 - What happens when conversation history is very large? Only recent relevant messages are retrieved for context (last 20 messages).
+- What happens when a user sends too many messages too quickly? System enforces rate limit of 20 requests/minute per user and returns friendly "Please slow down" message.
+- What happens when the AI service times out? After 30 seconds, system returns timeout error; no automatic retry; user must manually resend their message.
 
 ## Requirements *(mandatory)*
 
@@ -138,17 +140,22 @@ A user expects the chatbot to remember the context of their conversation within 
 
 - **FR-006**: System MUST translate natural language intents into appropriate task operations (add, list, update, complete, delete).
 - **FR-007**: System MUST respond with clarification requests when user intent is unclear, rather than making assumptions.
+- **FR-028**: System MUST parse due date expressions from natural language (e.g., "tomorrow", "next Friday", "in 3 days") and set the task due date accordingly. Priority is not parsed; users set priority via UI.
+- **FR-030**: System MUST handle multi-intent messages by executing all recognized intents in sequence and returning a combined response (e.g., "Add groceries and show my list" → creates task, then lists tasks).
 
 #### Conversation Management
 
 - **FR-008**: System MUST persist all conversations with unique identifiers per user.
 - **FR-009**: System MUST persist all messages (user and assistant) with timestamps and conversation references.
 - **FR-010**: System MUST maintain stateless request handling - no in-memory session state between requests.
+- **FR-029**: System MUST provide a "Clear history" function that deletes all messages from the user's conversation while preserving the conversation container.
 
 #### Security
 
 - **FR-011**: System MUST require valid JWT authentication for all chat requests.
 - **FR-012**: System MUST scope all task operations to the authenticated user (no cross-user data access).
+- **FR-026**: System MUST enforce rate limiting of 20 requests per minute per authenticated user, returning a friendly "Please slow down" message when exceeded.
+- **FR-027**: System MUST apply a 30-second timeout for AI service requests with no automatic retry; user must manually resend message on timeout.
 
 #### Observability
 
@@ -200,7 +207,7 @@ A user expects the chatbot to remember the context of their conversation within 
 2. The existing task data model from Phase 2 is sufficient for chatbot operations.
 3. Users will primarily interact in English.
 4. A single active conversation per user is sufficient for MVP (multiple conversations can be added later).
-5. Semantic search for task relevance uses embedding-based similarity matching.
+5. Task relevance for RAG context is determined by recency and keyword matching (MVP). Semantic/embedding-based search is a future enhancement.
 6. Message history retrieval defaults to the 20 most recent messages for context.
 7. Task operations follow the same business rules as the Phase 2 web interface.
 
@@ -218,6 +225,14 @@ A user expects the chatbot to remember the context of their conversation within 
 3. **Context Window Limits**: Large conversation histories may exceed AI context limits. Mitigation: Limit retrieved messages and summarize older context.
 
 ## Clarifications
+
+### Session 2026-01-19
+
+- Q: How should the system handle excessive chat message submissions from a single user? → A: Rate limit of 20 requests/minute per user, return friendly "Please slow down" message when exceeded
+- Q: What timeout threshold and retry behavior should apply when the AI service is slow? → A: 30-second timeout, no automatic retry, user must manually resend message
+- Q: Should the chatbot parse priority and due date from natural language input? → A: Parse due dates only (e.g., "tomorrow", "next Friday"); priority set via UI
+- Q: Should users be able to clear/reset their conversation history? → A: Yes, single "Clear history" button removes all messages from current conversation
+- Q: How should the system handle messages with multiple intents? → A: Execute all intents in sequence, return combined response
 
 ### Session 2026-01-04
 

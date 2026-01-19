@@ -1,6 +1,14 @@
 from datetime import datetime
+from enum import Enum
 from uuid import UUID, uuid4
 from sqlmodel import SQLModel, Field
+
+
+class Priority(str, Enum):
+    """Task priority levels."""
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
 
 
 class Task(SQLModel, table=True):
@@ -22,5 +30,7 @@ class Task(SQLModel, table=True):
     title: str = Field(max_length=200, nullable=False)
     description: str | None = Field(default=None)
     completed: bool = Field(default=False)
+    priority: str = Field(default="medium")  # high, medium, low
+    due_date: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

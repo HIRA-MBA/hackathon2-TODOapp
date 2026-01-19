@@ -1,4 +1,9 @@
 /**
+ * Task priority levels.
+ */
+export type Priority = 'high' | 'medium' | 'low';
+
+/**
  * Task entity from the backend API.
  * Per data-model.md and openapi.yaml
  */
@@ -7,6 +12,8 @@ export interface Task {
   title: string;
   description: string | null;
   completed: boolean;
+  priority: Priority;
+  dueDate: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -17,6 +24,8 @@ export interface Task {
 export interface TaskCreate {
   title: string;
   description?: string | null;
+  priority?: Priority;
+  dueDate?: string | null;
 }
 
 /**
@@ -25,6 +34,8 @@ export interface TaskCreate {
 export interface TaskUpdate {
   title?: string;
   description?: string | null;
+  priority?: Priority;
+  dueDate?: string | null;
 }
 
 /**

@@ -18,6 +18,8 @@ class TaskCreate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
+    priority: str = Field(default="medium", pattern="^(high|medium|low)$")
+    due_date: datetime | None = Field(None)
 
 
 class TaskUpdate(BaseModel):
@@ -28,6 +30,8 @@ class TaskUpdate(BaseModel):
 
     title: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
+    priority: str | None = Field(None, pattern="^(high|medium|low)$")
+    due_date: datetime | None = Field(None)
 
 
 class TaskResponse(BaseModel):
@@ -44,6 +48,8 @@ class TaskResponse(BaseModel):
     title: str
     description: str | None
     completed: bool
+    priority: str
+    due_date: datetime | None
     created_at: datetime
     updated_at: datetime
 

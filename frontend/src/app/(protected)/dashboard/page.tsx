@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useTasks } from "@/hooks/use-tasks";
+import { useTasks, SortBy } from "@/hooks/use-tasks";
 import { TaskList } from "@/components/tasks/task-list";
 import { TaskForm } from "@/components/tasks/task-form";
 import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
@@ -16,7 +16,8 @@ type FilterType = "all" | "active" | "completed";
  * Per FR-003: Protected dashboard page at /dashboard path.
  */
 export default function DashboardPage() {
-  const { tasks, isLoading, error, createTask, updateTask, toggleTask, deleteTask } = useTasks();
+  const [sortBy, setSortBy] = useState<SortBy>("created_at");
+  const { tasks, isLoading, error, createTask, updateTask, toggleTask, deleteTask } = useTasks({ sortBy });
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -121,29 +122,70 @@ export default function DashboardPage() {
             </Button>
           )}
 
-          {/* Filter Tabs */}
-          {tasks.length > 0 && (
-            <div className="flex bg-white rounded-lg p-1 shadow-sm border border-gray-200">
-              {(["all", "active", "completed"] as FilterType[]).map((f) => (
+          {/* Filter and Sort Controls */}
+          <div className="flex items-center gap-4">
+            {/* Sort Toggle */}
+            {tasks.length > 0 && (
+              <div className="flex bg-white rounded-lg p-1 shadow-sm border border-gray-200">
                 <button
-                  key={f}
-                  onClick={() => setFilter(f)}
+                  onClick={() => setSortBy("created_at")}
                   className={`
-                    px-4 py-2 text-sm font-medium rounded-md transition-colors
-                    ${filter === f
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-gray-600 hover:bg-gray-100"
+                    px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1
+                    ${sortBy === "created_at"
+                      ? "bg-gray-100 text-gray-900"
+                      : "text-gray-500 hover:bg-gray-50"
                     }
                   `}
+                  title="Sort by creation date (newest first)"
                 >
-                  {f.charAt(0).toUpperCase() + f.slice(1)}
-                  {f === "all" && ` (${stats.total})`}
-                  {f === "active" && ` (${stats.active})`}
-                  {f === "completed" && ` (${stats.completed})`}
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Recent
                 </button>
-              ))}
-            </div>
-          )}
+                <button
+                  onClick={() => setSortBy("due_date")}
+                  className={`
+                    px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1
+                    ${sortBy === "due_date"
+                      ? "bg-gray-100 text-gray-900"
+                      : "text-gray-500 hover:bg-gray-50"
+                    }
+                  `}
+                  title="Sort by due date (soonest first)"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Due Date
+                </button>
+              </div>
+            )}
+
+            {/* Filter Tabs */}
+            {tasks.length > 0 && (
+              <div className="flex bg-white rounded-lg p-1 shadow-sm border border-gray-200">
+                {(["all", "active", "completed"] as FilterType[]).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={`
+                      px-4 py-2 text-sm font-medium rounded-md transition-colors
+                      ${filter === f
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "text-gray-600 hover:bg-gray-100"
+                      }
+                    `}
+                  >
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                    {f === "all" && ` (${stats.total})`}
+                    {f === "active" && ` (${stats.active})`}
+                    {f === "completed" && ` (${stats.completed})`}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Task creation form */}

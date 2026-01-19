@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { Task, TaskUpdate } from "@/lib/types";
+import type { Task, TaskUpdate, Priority } from "@/lib/types";
 
 interface TaskEditDialogProps {
   task: Task;
@@ -13,11 +13,13 @@ interface TaskEditDialogProps {
 
 /**
  * Dialog for editing task details.
- * Per spec US6: Update Task Details with title and description.
+ * Per spec US6: Update Task Details with title, description, priority, and due date.
  */
 export function TaskEditDialog({ task, onSave, onCancel }: TaskEditDialogProps) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || "");
+  const [priority, setPriority] = useState<Priority>(task.priority || "medium");
+  const [dueDate, setDueDate] = useState(task.dueDate?.split("T")[0] || "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -51,6 +53,8 @@ export function TaskEditDialog({ task, onSave, onCancel }: TaskEditDialogProps) 
       await onSave({
         title: title.trim(),
         description: description.trim() || null,
+        priority,
+        dueDate: dueDate || null,
       });
     } finally {
       setIsLoading(false);
@@ -120,6 +124,43 @@ export function TaskEditDialog({ task, onSave, onCancel }: TaskEditDialogProps) 
             {errors.description && (
               <p className="mt-1 text-sm text-red-600">{errors.description}</p>
             )}
+          </div>
+
+          {/* Priority and Due Date */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor="edit-priority"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Priority
+              </label>
+              <select
+                id="edit-priority"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as Priority)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="edit-dueDate"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Due Date
+              </label>
+              <input
+                type="date"
+                id="edit-dueDate"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">

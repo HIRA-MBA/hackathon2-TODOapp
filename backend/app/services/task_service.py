@@ -23,16 +23,24 @@ class TaskService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def list_tasks(self, user_id: str) -> list[Task]:
-        """List all tasks for a user, ordered by created_at DESC.
+    async def list_tasks(
+        self, user_id: str, sort_by: str = "created_at"
+    ) -> list[Task]:
+        """List all tasks for a user with optional sorting.
 
-        Per FR-012a: Return tasks ordered by created_at DESC (newest first).
+        Args:
+            user_id: The user's ID
+            sort_by: Sort field - "created_at" (default, newest first) or "due_date" (soonest first)
         """
-        stmt = (
-            select(Task)
-            .where(Task.user_id == user_id)
-            .order_by(Task.created_at.desc())
-        )
+        stmt = select(Task).where(Task.user_id == user_id)
+
+        if sort_by == "due_date":
+            # Sort by due_date ascending (soonest first), nulls last
+            stmt = stmt.order_by(Task.due_date.asc().nulls_last(), Task.created_at.desc())
+        else:
+            # Default: newest first
+            stmt = stmt.order_by(Task.created_at.desc())
+
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
@@ -56,6 +64,8 @@ class TaskService:
             title=data.title.strip(),
             description=data.description.strip() if data.description else None,
             completed=False,
+            priority=data.priority,
+            due_date=data.due_date,
         )
         self.session.add(task)
         await self.session.flush()
@@ -76,6 +86,10 @@ class TaskService:
             values["title"] = data.title.strip()
         if data.description is not None:
             values["description"] = data.description.strip() if data.description else None
+        if data.priority is not None:
+            values["priority"] = data.priority
+        if data.due_date is not None:
+            values["due_date"] = data.due_date
 
         stmt = (
             update(Task)

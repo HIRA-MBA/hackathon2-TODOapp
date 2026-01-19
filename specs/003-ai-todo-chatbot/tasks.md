@@ -13,7 +13,7 @@
 | 3. Agent | 3.1-3.3 | MCP tools, agent config, prompts |
 | 4. API | 4.1-4.2 | Chat endpoint with SSE |
 | 5. Frontend | 5.1-5.4 | Chat UI components |
-| 6. Integration | 6.1-6.2 | E2E testing, polish |
+| 6. Integration | 6.1-6.3 | E2E testing, observability, polish |
 
 ---
 
@@ -21,17 +21,17 @@
 
 ### Task 1.1: Add Backend Dependencies
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 1
 **Dependencies**: None
 
 **Objective**: Add OpenAI Agents SDK and SSE support to backend.
 
 **Acceptance Criteria**:
-- [ ] `openai-agents>=0.0.10` added to pyproject.toml
-- [ ] `sse-starlette>=2.0.0` added to pyproject.toml
-- [ ] `OPENAI_API_KEY` added to settings.py
-- [ ] Dependencies install successfully with `uv sync`
+- [x] `openai-agents>=0.0.10` added to pyproject.toml
+- [x] `sse-starlette>=2.0.0` added to pyproject.toml
+- [x] `OPENAI_API_KEY` added to settings.py
+- [x] Dependencies install successfully with `uv sync`
 
 **Files to Modify**:
 - `backend/pyproject.toml`
@@ -49,16 +49,16 @@ from sse_starlette.sse import EventSourceResponse
 
 ### Task 1.2: Create Conversation Model
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 2
 **Dependencies**: 1.1
 
 **Objective**: Create SQLModel entity for conversations.
 
 **Acceptance Criteria**:
-- [ ] Conversation model with id, user_id, created_at, last_activity_at
-- [ ] Model registered in models/__init__.py
-- [ ] Index on user_id for fast lookups
+- [x] Conversation model with id, user_id, created_at, last_activity_at
+- [x] Model registered in models/__init__.py
+- [x] Index on user_id for fast lookups
 
 **Files to Create**:
 - `backend/app/models/conversation.py`
@@ -81,18 +81,18 @@ class Conversation(SQLModel, table=True):
 
 ### Task 1.3: Create Message Model
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 2
 **Dependencies**: 1.2
 
 **Objective**: Create SQLModel entity for messages with role enum.
 
 **Acceptance Criteria**:
-- [ ] Message model with id, conversation_id, role, content, metadata, created_at
-- [ ] Role constrained to 'user', 'assistant', 'tool'
-- [ ] Foreign key to Conversation with CASCADE delete
-- [ ] Composite index on (conversation_id, created_at)
-- [ ] Model registered in models/__init__.py
+- [x] Message model with id, conversation_id, role, content, metadata, created_at
+- [x] Role constrained to 'user', 'assistant', 'tool'
+- [x] Foreign key to Conversation with CASCADE delete
+- [x] Composite index on (conversation_id, created_at)
+- [x] Model registered in models/__init__.py
 
 **Files to Create**:
 - `backend/app/models/message.py`
@@ -122,17 +122,17 @@ class Message(SQLModel, table=True):
 
 ### Task 1.4: Create Database Migrations
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 2
 **Dependencies**: 1.2, 1.3
 
 **Objective**: Create Alembic migrations for Conversation and Message tables.
 
 **Acceptance Criteria**:
-- [ ] Migration 003 creates conversation table with index
-- [ ] Migration 004 creates message table with FK and indexes
-- [ ] Migrations run successfully: `alembic upgrade head`
-- [ ] Rollback works: `alembic downgrade -1`
+- [x] Migration 003 creates conversation table with index
+- [x] Migration 004 creates message table with FK and indexes
+- [x] Migrations run successfully: `alembic upgrade head`
+- [x] Rollback works: `alembic downgrade -1`
 
 **Files to Create**:
 - `backend/alembic/versions/003_create_conversation_table.py`
@@ -152,18 +152,18 @@ alembic upgrade head
 
 ### Task 2.1: Create Conversation Service
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 2
 **Dependencies**: 1.4
 
 **Objective**: Implement service for conversation and message CRUD operations.
 
 **Acceptance Criteria**:
-- [ ] `get_or_create_conversation(user_id)` - returns existing or creates new
-- [ ] `get_recent_messages(conversation_id, limit=20)` - returns messages ordered by created_at
-- [ ] `create_message(conversation_id, role, content, metadata)` - persists message
-- [ ] `update_conversation_activity(conversation_id)` - updates last_activity_at
-- [ ] All queries scoped by user_id where applicable
+- [x] `get_or_create_conversation(user_id)` - returns existing or creates new
+- [x] `get_recent_messages(conversation_id, limit=20)` - returns messages ordered by created_at
+- [x] `create_message(conversation_id, role, content, metadata)` - persists message
+- [x] `update_conversation_activity(conversation_id)` - updates last_activity_at
+- [x] All queries scoped by user_id where applicable
 
 **Files to Create**:
 - `backend/app/services/conversation_service.py`
@@ -192,17 +192,17 @@ async def test_message_ordering():
 
 ### Task 2.2: Create Chat Schemas
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 1
 **Dependencies**: 1.3
 
 **Objective**: Define Pydantic schemas for chat request/response.
 
 **Acceptance Criteria**:
-- [ ] `ChatRequest` with message (required)
-- [ ] `ChatResponse` with response, tool_executions, conversation_id
-- [ ] `ToolExecution` with tool, status, result
-- [ ] `ChatStreamEvent` for SSE events
+- [x] `ChatRequest` with message (required)
+- [x] `ChatResponse` with response, tool_executions, conversation_id
+- [x] `ToolExecution` with tool, status, result
+- [x] `ChatStreamEvent` for SSE events
 
 **Files to Create**:
 - `backend/app/schemas/chat.py`
@@ -231,22 +231,35 @@ class ChatStreamEvent(BaseModel):
     conversation_id: str | None = None
 ```
 
+**Test Cases**:
+```python
+async def test_message_length_validation():
+    long_message = "x" * 2001
+    response = await client.post("/api/chat", json={"message": long_message}, headers=auth_headers)
+    assert response.status_code == 422
+    assert "2000" in response.json()["detail"][0]["msg"]
+
+async def test_empty_message_rejected():
+    response = await client.post("/api/chat", json={"message": ""}, headers=auth_headers)
+    assert response.status_code == 422
+```
+
 ---
 
 ## Phase 3: Agent Layer
 
 ### Task 3.1: Create User Context
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 1
 **Dependencies**: 2.1
 
 **Objective**: Define UserContext dataclass for agent tool injection.
 
 **Acceptance Criteria**:
-- [ ] `UserContext` dataclass with user_id, email, db session
-- [ ] Immutable (frozen=True)
-- [ ] Type hints for all fields
+- [x] `UserContext` dataclass with user_id, email, db session
+- [x] Immutable (frozen=True)
+- [x] Type hints for all fields
 
 **Files to Create**:
 - `backend/app/agent/context.py`
@@ -267,21 +280,21 @@ class UserContext:
 
 ### Task 3.2: Implement MCP Tools
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 1
 **Dependencies**: 3.1, existing TaskService
 
 **Objective**: Create 5 MCP tools wrapping TaskService operations.
 
 **Acceptance Criteria**:
-- [ ] `add_task(ctx, title, description?)` - creates task, returns success/error string
-- [ ] `list_tasks(ctx, status?, search?)` - returns formatted task list
-- [ ] `update_task(ctx, task_id, title?, description?)` - updates task
-- [ ] `complete_task(ctx, task_id)` - marks task complete
-- [ ] `delete_task(ctx, task_id)` - removes task
-- [ ] All tools use TaskService (no direct DB access)
-- [ ] All tools return standardized response strings
-- [ ] Tools handle UUID parsing errors gracefully
+- [x] `add_task(ctx, title, description?)` - creates task, returns success/error string
+- [x] `list_tasks(ctx, status?, search?)` - returns formatted task list
+- [x] `update_task(ctx, task_id, title?, description?)` - updates task
+- [x] `complete_task(ctx, task_id)` - marks task complete
+- [x] `delete_task(ctx, task_id)` - removes task
+- [x] All tools use TaskService (no direct DB access)
+- [x] All tools return standardized response strings
+- [x] Tools handle UUID parsing errors gracefully
 
 **Files to Create**:
 - `backend/app/tools/task_tools.py`
@@ -306,16 +319,16 @@ async def test_list_tasks_empty():
 
 ### Task 3.3: Create System Prompts
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 1
 **Dependencies**: None
 
 **Objective**: Define system prompt template for the todo agent.
 
 **Acceptance Criteria**:
-- [ ] `SYSTEM_PROMPT_TEMPLATE` with {task_context} placeholder
-- [ ] `format_task_context(tasks)` - formats task list for prompt
-- [ ] `build_system_prompt(tasks)` - returns complete prompt
+- [x] `SYSTEM_PROMPT_TEMPLATE` with {task_context} placeholder
+- [x] `format_task_context(tasks)` - formats task list for prompt
+- [x] `build_system_prompt(tasks)` - returns complete prompt
 
 **Files to Create**:
 - `backend/app/agent/prompts.py`
@@ -345,17 +358,17 @@ def format_task_context(tasks: list[Task]) -> str:
 
 ### Task 3.4: Configure Todo Agent
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 1
 **Dependencies**: 3.2, 3.3
 
 **Objective**: Set up OpenAI Agent with tools and configuration.
 
 **Acceptance Criteria**:
-- [ ] Agent configured with gpt-4o-mini model
-- [ ] All 5 tools registered
-- [ ] UserContext generic type parameter set
-- [ ] Agent name and instructions configured
+- [x] Agent configured with gpt-4o-mini model
+- [x] All 5 tools registered
+- [x] UserContext generic type parameter set
+- [x] Agent name and instructions configured
 
 **Files to Create**:
 - `backend/app/agent/todo_agent.py`
@@ -380,18 +393,18 @@ todo_agent = Agent[UserContext](
 
 ### Task 4.1: Create Chat Service
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 1
 **Dependencies**: 3.4, 2.1
 
 **Objective**: Implement chat orchestration service that coordinates context assembly and agent execution.
 
 **Acceptance Criteria**:
-- [ ] `process_chat_message(user_id, message, db)` - main entry point
-- [ ] Assembles context (conversation, messages, tasks)
-- [ ] Runs agent with context
-- [ ] Persists all messages (user, tool, assistant)
-- [ ] Returns ChatResponse or streams events
+- [x] `process_chat_message(user_id, message, db)` - main entry point
+- [x] Assembles context (conversation, messages, tasks)
+- [x] Runs agent with context
+- [x] Persists all messages (user, tool, assistant)
+- [x] Returns ChatResponse or streams events
 
 **Files to Create**:
 - `backend/app/services/chat_service.py`
@@ -432,18 +445,18 @@ async def process_chat_message(
 
 ### Task 4.2: Create Chat Endpoint
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 2
 **Dependencies**: 4.1
 
 **Objective**: Implement POST /api/chat endpoint with SSE streaming.
 
 **Acceptance Criteria**:
-- [ ] `POST /api/chat` accepts ChatRequest body
-- [ ] Requires JWT authentication (reuse CurrentUser dependency)
-- [ ] Returns SSE stream with ChatStreamEvents
-- [ ] Handles errors gracefully (persists user message, returns error event)
-- [ ] Route registered in main.py
+- [x] `POST /api/chat` accepts ChatRequest body
+- [x] Requires JWT authentication (reuse CurrentUser dependency)
+- [x] Returns SSE stream with ChatStreamEvents
+- [x] Handles errors gracefully (persists user message, returns error event)
+- [x] Route registered in main.py
 
 **Files to Create**:
 - `backend/app/api/routes/chat.py`
@@ -494,17 +507,17 @@ async def test_chat_creates_task():
 
 ### Task 5.1: Create Chat API Client
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 1
 **Dependencies**: 4.2
 
 **Objective**: Create TypeScript client for chat API with SSE support.
 
 **Acceptance Criteria**:
-- [ ] `sendChatMessage(message)` - sends message, returns SSE stream
-- [ ] Parses SSE events into typed objects
-- [ ] Handles connection errors
-- [ ] Uses existing auth token from session
+- [x] `sendChatMessage(message)` - sends message, returns SSE stream
+- [x] Parses SSE events into typed objects
+- [x] Handles connection errors
+- [x] Uses existing auth token from session
 
 **Files to Create**:
 - `frontend/src/lib/chat-api.ts`
@@ -536,17 +549,17 @@ export async function* sendChatMessage(message: string): AsyncGenerator<ChatEven
 
 ### Task 5.2: Create Chat Hook
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 1
 **Dependencies**: 5.1
 
 **Objective**: Create React hook for chat state management.
 
 **Acceptance Criteria**:
-- [ ] `useChat()` hook returns messages, sendMessage, isLoading, error
-- [ ] Manages message history state
-- [ ] Handles streaming updates
-- [ ] Auto-scrolls on new messages
+- [x] `useChat()` hook returns messages, sendMessage, isLoading, error
+- [x] Manages message history state
+- [x] Handles streaming updates
+- [x] Auto-scrolls on new messages
 
 **Files to Create**:
 - `frontend/src/hooks/use-chat.ts`
@@ -581,20 +594,20 @@ export function useChat() {
 
 ### Task 5.3: Create Chat Components
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 5
 **Dependencies**: 5.2
 
 **Objective**: Build chat UI components.
 
 **Acceptance Criteria**:
-- [ ] `ChatContainer` - main wrapper with scroll area
-- [ ] `MessageList` - renders message history
-- [ ] `MessageItem` - individual message bubble (user/assistant/tool)
-- [ ] `ChatInput` - text input with send button
-- [ ] `ToolResult` - displays tool execution results inline
-- [ ] Responsive design with Tailwind CSS
-- [ ] Loading states during streaming
+- [x] `ChatContainer` - main wrapper with scroll area
+- [x] `MessageList` - renders message history
+- [x] `MessageItem` - individual message bubble (user/assistant/tool)
+- [x] `ChatInput` - text input with send button
+- [x] `ToolResult` - displays tool execution results inline
+- [x] Responsive design with Tailwind CSS
+- [x] Loading states during streaming
 
 **Files to Create**:
 - `frontend/src/components/chat/chat-container.tsx`
@@ -607,18 +620,18 @@ export function useChat() {
 
 ### Task 5.4: Create Chat Page
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 2
 **Dependencies**: 5.3
 
 **Objective**: Create the /chat page and add navigation.
 
 **Acceptance Criteria**:
-- [ ] `/chat` page with ChatContainer
-- [ ] Protected route (requires auth)
-- [ ] Loads existing conversation history on mount
-- [ ] Chat link added to navbar
-- [ ] Page title set appropriately
+- [x] `/chat` page with ChatContainer
+- [x] Protected route (requires auth)
+- [x] Loads existing conversation history on mount
+- [x] Chat link added to navbar
+- [x] Page title set appropriately
 
 **Files to Create**:
 - `frontend/src/app/(protected)/chat/page.tsx`
@@ -630,16 +643,16 @@ export function useChat() {
 
 ### Task 5.5: Create Chat API Proxy Route
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 1
 **Dependencies**: 5.1
 
 **Objective**: Create Next.js API route to proxy chat requests to backend.
 
 **Acceptance Criteria**:
-- [ ] `POST /api/chat` proxies to backend with auth header
-- [ ] Streams SSE response back to client
-- [ ] Handles backend errors gracefully
+- [x] `POST /api/chat` proxies to backend with auth header
+- [x] Streams SSE response back to client
+- [x] Handles backend errors gracefully
 
 **Files to Create**:
 - `frontend/src/app/api/chat/route.ts`
@@ -680,19 +693,19 @@ export async function POST(request: Request) {
 
 ### Task 6.1: Integration Testing
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 2
 **Dependencies**: 5.4
 
 **Objective**: Write integration tests for chat flow.
 
 **Acceptance Criteria**:
-- [ ] Test: Create task via chat → verify task in DB
-- [ ] Test: List tasks via chat → verify response matches DB
-- [ ] Test: Complete task via chat → verify status change
-- [ ] Test: Delete task via chat → verify removal
-- [ ] Test: Conversation persistence across requests
-- [ ] Test: Message history limits (20 messages)
+- [x] Test: Create task via chat → verify task in DB
+- [x] Test: List tasks via chat → verify response matches DB
+- [x] Test: Complete task via chat → verify status change
+- [x] Test: Delete task via chat → verify removal
+- [x] Test: Conversation persistence across requests
+- [x] Test: Message history limits (20 messages)
 
 **Files to Create**:
 - `backend/tests/test_chat_integration.py`
@@ -702,21 +715,77 @@ export async function POST(request: Request) {
 
 ### Task 6.2: Error Handling & Logging
 
-**Status**: `pending`
+**Status**: `completed`
 **Estimated Files**: 2
 **Dependencies**: 6.1
 
 **Objective**: Add structured logging and error handling.
 
 **Acceptance Criteria**:
-- [ ] Request ID generated for each chat request
-- [ ] Structured logs with request_id, user_id, tool calls
-- [ ] Graceful handling of OpenAI API errors
-- [ ] User-friendly error messages in UI
+- [x] Request ID generated for each chat request
+- [x] Structured logs with request_id, user_id, tool calls
+- [x] Graceful handling of OpenAI API errors
+- [x] User-friendly error messages in UI
 
 **Files to Modify**:
 - `backend/app/services/chat_service.py`
 - `backend/app/api/routes/chat.py`
+
+---
+
+### Task 6.3: Implement Observability Infrastructure
+
+**Status**: `completed`
+**Estimated Files**: 3
+**Dependencies**: 4.2
+
+**Objective**: Add structured logging with request IDs and key metrics tracking per FR-024 and FR-025.
+
+**Acceptance Criteria**:
+- [x] Unique request_id generated for each chat request (UUID)
+- [x] Structured JSON logs include: request_id, user_id, timestamp, tool_calls, latency_ms
+- [x] Metrics captured: request latency (p50/p95), AI service response time, tool call counts
+- [x] Logs written to stdout in JSON format for container aggregation
+- [x] Request ID passed through to agent context for tool-level logging
+
+**Files to Create**:
+- `backend/app/middleware/request_id.py`
+
+**Files to Modify**:
+- `backend/app/services/chat_service.py`
+- `backend/app/api/routes/chat.py`
+- `backend/app/main.py`
+
+**Implementation**:
+```python
+# middleware/request_id.py
+import uuid
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+```
+
+**Test Cases**:
+```python
+async def test_request_id_in_response_header():
+    response = await client.post("/api/chat", json={"message": "hi"}, headers=auth_headers)
+    assert "X-Request-ID" in response.headers
+    assert len(response.headers["X-Request-ID"]) == 36  # UUID format
+
+async def test_structured_log_format(caplog):
+    await client.post("/api/chat", json={"message": "list tasks"}, headers=auth_headers)
+    # Verify log contains required fields
+    log_record = json.loads(caplog.records[-1].message)
+    assert "request_id" in log_record
+    assert "user_id" in log_record
+    assert "latency_ms" in log_record
+```
 
 ---
 
@@ -759,7 +828,10 @@ export async function POST(request: Request) {
                            6.1 (integration tests)
                                 │
                                 ▼
-                           6.2 (logging)
+                           6.2 (error handling)
+                                │
+                                ▼
+                           6.3 (observability)
 ```
 
 ## Estimated Effort
@@ -771,5 +843,5 @@ export async function POST(request: Request) {
 | 3. Agent | 4 | AI integration |
 | 4. API | 2 | Endpoint |
 | 5. Frontend | 5 | UI |
-| 6. Integration | 2 | Polish |
-| **Total** | **19** | |
+| 6. Integration | 3 | Polish |
+| **Total** | **20** | |

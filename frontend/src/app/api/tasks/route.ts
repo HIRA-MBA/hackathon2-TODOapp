@@ -48,7 +48,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const response = await fetch(`${BACKEND_URL}/api/tasks`, {
+    // Pass through sort_by query parameter
+    const sortBy = request.nextUrl.searchParams.get("sort_by") || "created_at";
+    const backendUrl = `${BACKEND_URL}/api/tasks?sort_by=${sortBy}`;
+
+    const response = await fetch(backendUrl, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",

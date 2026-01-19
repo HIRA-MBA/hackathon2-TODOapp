@@ -1,7 +1,7 @@
+from typing import Annotated, Literal
 from uuid import UUID
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.database import get_session
@@ -24,12 +24,16 @@ TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 async def list_tasks(
     user: CurrentUser,
     service: TaskServiceDep,
+    sort_by: Literal["created_at", "due_date"] = Query(
+        default="created_at",
+        description="Sort order: 'created_at' (newest first) or 'due_date' (soonest first)",
+    ),
 ):
     """List all tasks for authenticated user.
 
-    Per FR-012a: Returns tasks ordered by created_at DESC (newest first).
+    Supports sorting by created_at (default) or due_date.
     """
-    tasks = await service.list_tasks(user.user_id)
+    tasks = await service.list_tasks(user.user_id, sort_by=sort_by)
     return TaskListResponse(
         tasks=[TaskResponse.model_validate(t) for t in tasks],
         count=len(tasks),

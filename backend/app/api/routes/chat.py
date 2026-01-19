@@ -18,6 +18,7 @@ from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
     ChatStreamEvent,
+    ClearHistoryResponse,
     ConversationHistoryResponse,
     MessageResponse,
 )
@@ -100,4 +101,29 @@ async def get_history(
             )
             for msg in messages
         ],
+    )
+
+
+@router.delete("/history")
+async def clear_history(
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_session)],
+) -> ClearHistoryResponse:
+    """Clear the user's conversation history.
+
+    Per spec FR-029: System MUST provide a "Clear history" function that
+    deletes all messages from the user's conversation while preserving
+    the conversation container.
+
+    Returns:
+        Confirmation message with count of deleted messages.
+    """
+    chat_service = ChatService(db)
+    deleted_count = await chat_service.clear_history(user.user_id)
+
+    logger.info(f"Cleared {deleted_count} messages for user {user.user_id}")
+
+    return ClearHistoryResponse(
+        message="Conversation history cleared successfully.",
+        messages_deleted=deleted_count,
     )

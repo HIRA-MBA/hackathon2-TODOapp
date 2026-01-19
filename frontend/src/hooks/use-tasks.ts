@@ -4,6 +4,12 @@ import { useState, useEffect, useCallback } from "react";
 import { taskApi } from "@/lib/api.client";
 import type { Task, TaskCreate, TaskUpdate } from "@/lib/types";
 
+export type SortBy = "created_at" | "due_date";
+
+interface UseTasksOptions {
+  sortBy?: SortBy;
+}
+
 interface UseTasksReturn {
   tasks: Task[];
   isLoading: boolean;
@@ -19,7 +25,8 @@ interface UseTasksReturn {
  * Hook for managing task data and operations.
  * Per FR-010: Display loading states during API operations.
  */
-export function useTasks(): UseTasksReturn {
+export function useTasks(options: UseTasksOptions = {}): UseTasksReturn {
+  const { sortBy = "created_at" } = options;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,14 +35,14 @@ export function useTasks(): UseTasksReturn {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await taskApi.listTasks();
+      const response = await taskApi.listTasks(sortBy);
       setTasks(response.tasks);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch tasks");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [sortBy]);
 
   useEffect(() => {
     fetchTasks();

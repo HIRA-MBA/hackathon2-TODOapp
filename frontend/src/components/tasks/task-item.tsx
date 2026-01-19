@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import type { Task } from "@/lib/types";
+import { useState, useMemo } from "react";
+import type { Task, Priority } from "@/lib/types";
 
 interface TaskItemProps {
   task: Task;
@@ -10,12 +10,41 @@ interface TaskItemProps {
   onDelete?: (id: string) => void;
 }
 
+const priorityConfig: Record<Priority, { label: string; color: string; bg: string }> = {
+  high: { label: "High", color: "text-red-700", bg: "bg-red-100" },
+  medium: { label: "Med", color: "text-yellow-700", bg: "bg-yellow-100" },
+  low: { label: "Low", color: "text-green-700", bg: "bg-green-100" },
+};
+
 /**
  * Individual task item component.
  * Per FR-011a: Display completed tasks with visual distinction.
  */
 export function TaskItem({ task, onToggle, onEdit, onDelete }: TaskItemProps) {
   const [isToggling, setIsToggling] = useState(false);
+
+  const dueInfo = useMemo(() => {
+    if (!task.dueDate) return null;
+    const due = new Date(task.dueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0 && !task.completed) {
+      return { label: "Overdue", isOverdue: true, isToday: false };
+    } else if (diffDays === 0) {
+      return { label: "Today", isOverdue: false, isToday: true };
+    } else if (diffDays === 1) {
+      return { label: "Tomorrow", isOverdue: false, isToday: false };
+    } else {
+      return {
+        label: due.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        isOverdue: false,
+        isToday: false,
+      };
+    }
+  }, [task.dueDate, task.completed]);
 
   const handleToggle = async () => {
     setIsToggling(true);
@@ -78,20 +107,51 @@ export function TaskItem({ task, onToggle, onEdit, onDelete }: TaskItemProps) {
           </p>
         )}
 
-        {/* Timestamp */}
-        <p className="mt-2 text-xs text-gray-400">
-          {task.completed ? "Completed" : "Created"} {(() => {
-            const dateStr = task.createdAt || (task as unknown as { created_at?: string }).created_at;
-            if (!dateStr) return "";
-            const date = new Date(dateStr);
-            const currentYear = new Date().getFullYear().toString();
-            return date.toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-              year: dateStr.startsWith(currentYear) ? undefined : "numeric"
-            });
-          })()}
-        </p>
+        {/* Priority badge and Due date */}
+        <div className="mt-2 flex items-center gap-2 flex-wrap">
+          {task.priority && task.priority !== "medium" && (
+            <span
+              className={`
+                inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                ${priorityConfig[task.priority]?.bg || "bg-gray-100"}
+                ${priorityConfig[task.priority]?.color || "text-gray-700"}
+              `}
+            >
+              {priorityConfig[task.priority]?.label || task.priority}
+            </span>
+          )}
+
+          {dueInfo && (
+            <span
+              className={`
+                inline-flex items-center gap-1 text-xs
+                ${dueInfo.isOverdue ? "text-red-600 font-medium" : ""}
+                ${dueInfo.isToday ? "text-blue-600 font-medium" : ""}
+                ${!dueInfo.isOverdue && !dueInfo.isToday ? "text-gray-500" : ""}
+              `}
+            >
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {dueInfo.label}
+            </span>
+          )}
+
+          {/* Timestamp */}
+          <span className="text-xs text-gray-400">
+            {task.completed ? "Completed" : "Created"} {(() => {
+              const dateStr = task.createdAt || (task as unknown as { created_at?: string }).created_at;
+              if (!dateStr) return "";
+              const date = new Date(dateStr);
+              const currentYear = new Date().getFullYear().toString();
+              return date.toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                year: dateStr.startsWith(currentYear) ? undefined : "numeric"
+              });
+            })()}
+          </span>
+        </div>
       </div>
 
       {/* Action buttons - visible on hover or focus */}

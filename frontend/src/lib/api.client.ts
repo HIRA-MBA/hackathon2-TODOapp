@@ -46,9 +46,11 @@ class TaskApiClient {
 
   /**
    * List all tasks for the current user.
+   * @param sortBy - Sort order: "created_at" (newest first) or "due_date" (soonest first)
    */
-  async listTasks(): Promise<TaskListResponse> {
-    return this.request<TaskListResponse>(API_BASE);
+  async listTasks(sortBy: "created_at" | "due_date" = "created_at"): Promise<TaskListResponse> {
+    const url = sortBy !== "created_at" ? `${API_BASE}?sort_by=${sortBy}` : API_BASE;
+    return this.request<TaskListResponse>(url);
   }
 
   /**

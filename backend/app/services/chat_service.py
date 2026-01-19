@@ -6,9 +6,15 @@ Per spec FR-003: Retrieve relevant tasks and messages for context.
 Per spec FR-004: Execute appropriate task operations based on intent.
 Per spec FR-005: Persist all assistant responses.
 Per spec FR-010: Stateless request handling.
+Per spec FR-024: Structured logs with unique request IDs.
+Per spec FR-025: Key metrics including latency, AI response time, tool calls.
+Per spec FR-027: 30-second timeout for AI service requests.
 """
 
+import asyncio
 import logging
+import time
+import uuid
 from typing import AsyncGenerator
 from uuid import UUID
 
@@ -24,6 +30,9 @@ from app.services.task_service import TaskService
 from app.schemas.chat import ChatStreamEvent, ToolExecution
 
 logger = logging.getLogger(__name__)
+
+# Timeout configuration per FR-027
+AI_SERVICE_TIMEOUT_SECONDS = 30
 
 
 class ChatService:
@@ -57,8 +66,17 @@ class ChatService:
         Yields:
             ChatStreamEvent objects for SSE streaming.
         """
-        request_id = str(UUID(int=0))  # TODO: Generate proper request ID
-        logger.info(f"[{request_id}] Processing chat message for user {user_id}")
+        request_id = str(uuid.uuid4())
+        start_time = time.perf_counter()
+        tool_call_count = 0
+
+        logger.info(
+            "chat_processing_started",
+            extra={
+                "request_id": request_id,
+                "user_id": user_id,
+            }
+        )
 
         try:
             # 1. Get or create conversation
@@ -66,7 +84,14 @@ class ChatService:
 
             conversation = await self.conversation_service.get_or_create_conversation(user_id)
             conversation_id = str(conversation.id)
-            logger.info(f"[{request_id}] Using conversation {conversation_id}")
+            logger.info(
+                "conversation_loaded",
+                extra={
+                    "request_id": request_id,
+                    "user_id": user_id,
+                    "conversation_id": conversation_id,
+                }
+            )
 
             # 2. Load context (recent messages and tasks)
             recent_messages = await self.conversation_service.get_recent_messages(
@@ -77,7 +102,13 @@ class ChatService:
             tasks = tasks[:20]
 
             logger.info(
-                f"[{request_id}] Context: {len(recent_messages)} messages, {len(tasks)} tasks"
+                "context_assembled",
+                extra={
+                    "request_id": request_id,
+                    "user_id": user_id,
+                    "message_count": len(recent_messages),
+                    "task_count": len(tasks),
+                }
             )
 
             # 3. Persist user message
@@ -103,6 +134,7 @@ class ChatService:
             # 7. Run the agent
             tool_executions: list[ToolExecution] = []
             response_content = ""
+            ai_start_time = time.perf_counter()
 
             # Build full input with task context and history
             input_parts = []
@@ -120,12 +152,16 @@ class ChatService:
             full_input = "\n".join(input_parts)
 
             try:
-                # Use the agent with streaming
-                result = await Runner.run(
-                    starting_agent=todo_agent,
-                    input=full_input,
-                    context=ctx,
-                )
+                # Use the agent with streaming and timeout per FR-027
+                async with asyncio.timeout(AI_SERVICE_TIMEOUT_SECONDS):
+                    result = await Runner.run(
+                        starting_agent=todo_agent,
+                        input=full_input,
+                        context=ctx,
+                    )
+
+                # Calculate AI response time
+                ai_latency_ms = (time.perf_counter() - ai_start_time) * 1000
 
                 # Process the result
                 response_content = result.final_output or ""
@@ -140,6 +176,18 @@ class ChatService:
                         status = "success" if "success" in tool_output.lower() else "error"
                         if "info" in tool_output.lower():
                             status = "success"
+
+                        tool_call_count += 1
+
+                        logger.info(
+                            "tool_executed",
+                            extra={
+                                "request_id": request_id,
+                                "user_id": user_id,
+                                "tool": tool_name,
+                                "status": status,
+                            }
+                        )
 
                         yield ChatStreamEvent(
                             type="tool_call",
@@ -168,8 +216,39 @@ class ChatService:
                             metadata={"tool": tool_name, "status": status},
                         )
 
+            except asyncio.TimeoutError:
+                # Per FR-027: 30-second timeout with no automatic retry
+                ai_latency_ms = (time.perf_counter() - ai_start_time) * 1000
+                logger.warning(
+                    "ai_service_timeout",
+                    extra={
+                        "request_id": request_id,
+                        "user_id": user_id,
+                        "timeout_seconds": AI_SERVICE_TIMEOUT_SECONDS,
+                        "ai_latency_ms": round(ai_latency_ms, 2),
+                    },
+                )
+                response_content = (
+                    "I'm sorry, the request took too long to process. "
+                    "Please try again with a simpler request."
+                )
+                yield ChatStreamEvent(
+                    type="error",
+                    content="Request timed out. Please try again.",
+                )
+
             except Exception as agent_error:
-                logger.error(f"[{request_id}] Agent error: {agent_error}")
+                ai_latency_ms = (time.perf_counter() - ai_start_time) * 1000
+                logger.error(
+                    "agent_error",
+                    extra={
+                        "request_id": request_id,
+                        "user_id": user_id,
+                        "error": str(agent_error),
+                        "ai_latency_ms": round(ai_latency_ms, 2),
+                    },
+                    exc_info=True,
+                )
                 response_content = "I'm sorry, I encountered an error processing your request. Please try again."
                 yield ChatStreamEvent(
                     type="error",
@@ -199,10 +278,33 @@ class ChatService:
                 conversation_id=conversation_id,
             )
 
-            logger.info(f"[{request_id}] Chat processing complete")
+            # Calculate total latency
+            total_latency_ms = (time.perf_counter() - start_time) * 1000
+
+            logger.info(
+                "chat_processing_completed",
+                extra={
+                    "request_id": request_id,
+                    "user_id": user_id,
+                    "conversation_id": conversation_id,
+                    "latency_ms": round(total_latency_ms, 2),
+                    "ai_latency_ms": round(ai_latency_ms, 2) if 'ai_latency_ms' in dir() else None,
+                    "tool_calls": tool_call_count,
+                }
+            )
 
         except Exception as e:
-            logger.exception(f"[{request_id}] Error processing chat message")
+            total_latency_ms = (time.perf_counter() - start_time) * 1000
+            logger.error(
+                "chat_processing_failed",
+                extra={
+                    "request_id": request_id,
+                    "user_id": user_id,
+                    "error": str(e),
+                    "latency_ms": round(total_latency_ms, 2),
+                },
+                exc_info=True,
+            )
             yield ChatStreamEvent(
                 type="error",
                 content=f"An error occurred: {str(e)}",
@@ -234,3 +336,30 @@ class ChatService:
             }
             for msg in messages
         ]
+
+    async def clear_history(self, user_id: str) -> int:
+        """Clear the user's conversation history.
+
+        Per spec FR-029: System MUST provide a "Clear history" function that
+        deletes all messages from the user's conversation while preserving
+        the conversation container.
+
+        Args:
+            user_id: Authenticated user's ID.
+
+        Returns:
+            Number of messages deleted.
+        """
+        conversation = await self.conversation_service.get_or_create_conversation(user_id)
+        deleted_count = await self.conversation_service.clear_messages(conversation.id)
+
+        logger.info(
+            "conversation_history_cleared",
+            extra={
+                "user_id": user_id,
+                "conversation_id": str(conversation.id),
+                "messages_deleted": deleted_count,
+            }
+        )
+
+        return deleted_count
