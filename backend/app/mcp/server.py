@@ -1,7 +1,10 @@
 """FastMCP server for ChatKit integration.
 
 Exposes task operations as MCP tools, reusing TaskService for all CRUD.
-Supports JWT authentication via Authorization header.
+Supports multiple authentication modes:
+1. JWT Bearer token via Authorization header
+2. API Key + X-User-ID header for workflow authentication
+3. Session token parameter for ChatKit tool calls
 """
 
 import logging
@@ -12,14 +15,13 @@ from uuid import UUID
 
 import jwt
 from fastmcp import FastMCP
-from starlette.applications import Starlette
-from starlette.responses import JSONResponse
-from starlette.routing import Mount
+from sqlalchemy import select
 
 from app.config.database import async_session_maker
 from app.config.settings import get_settings
 from app.services.task_service import TaskService
 from app.schemas.task import TaskCreate, TaskUpdate
+from app.models.chatkit_session import ChatkitSession
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -30,7 +32,11 @@ current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=
 
 mcp = FastMCP(
     name="TodoMCP",
-    instructions="Help users manage their todo list. Use tools to add, list, update, complete, and delete tasks. Tasks can have priority (high/medium/low) and due dates.",
+    instructions="""Help users manage their todo list. Use tools to add, list, update, complete, and delete tasks.
+Tasks can have priority (high/medium/low) and due dates.
+
+IMPORTANT: All tools require a session_token parameter for authentication.
+Always include the session_token when calling any tool.""",
 )
 
 
@@ -65,7 +71,11 @@ class AuthMiddleware:
 
     Does NOT block requests - just extracts user context for tools.
     Auth validation happens at tool execution time - tools MUST check auth.
-    SECURITY: No fallback user - authentication is required for task operations.
+
+    Supports two authentication modes:
+    1. JWT Bearer token - extracts user_id from token's 'sub' claim
+    2. API Key + X-User-ID header - for ChatKit workflow authentication
+       When a valid API key is present, trusts X-User-ID header for user context
     """
 
     def __init__(self, app):
@@ -76,19 +86,26 @@ class AuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Extract user_id from auth header (non-blocking)
+        # Extract headers
         headers = dict(scope.get("headers", []))
         auth_header = headers.get(b"authorization", b"").decode()
+        user_id_header = headers.get(b"x-user-id", b"").decode()
 
-        # SECURITY FIX: No fallback user - must authenticate
+        # SECURITY: No fallback user - must authenticate
         user_id = None
 
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
             if verify_api_key(token):
-                # API key auth - still need user context from elsewhere
-                logger.info("MCP auth: Valid API key (no user context)")
+                # API key auth - trust X-User-ID header for user context
+                # This enables ChatKit workflows to act on behalf of users
+                if user_id_header:
+                    user_id = user_id_header
+                    logger.info(f"MCP auth: API key + X-User-ID header for user {user_id}")
+                else:
+                    logger.info("MCP auth: Valid API key but no X-User-ID header")
             else:
+                # Try JWT authentication
                 extracted_id = verify_jwt(token)
                 if extracted_id:
                     user_id = extracted_id
@@ -104,16 +121,9 @@ class AuthMiddleware:
             current_user_id.reset(ctx_token)
 
 
-def get_user_id() -> str:
-    """Get current authenticated user_id from context.
-
-    Raises:
-        ValueError: If no authenticated user context is available.
-    """
-    user_id = current_user_id.get()
-    if not user_id:
-        raise ValueError("Authentication required")
-    return user_id
+def get_user_id_from_context() -> str | None:
+    """Get current authenticated user_id from context (may be None)."""
+    return current_user_id.get()
 
 
 @asynccontextmanager
@@ -128,8 +138,63 @@ async def get_session():
             raise
 
 
-async def _add_task_impl(
+async def validate_session_token(token: str) -> str | None:
+    """Validate a ChatKit session token and return the user_id.
+
+    Args:
+        token: The session token to validate
+
+    Returns:
+        The user_id if token is valid, None otherwise
+    """
+    async with get_session() as session:
+        stmt = select(ChatkitSession).where(
+            ChatkitSession.token == token,
+            ChatkitSession.revoked == False,
+            ChatkitSession.expires_at > datetime.utcnow(),
+        )
+        result = await session.execute(stmt)
+        session_record = result.scalar_one_or_none()
+
+        if session_record:
+            logger.info(f"MCP auth: Valid session token for user {session_record.user_id}")
+            return session_record.user_id
+
+        logger.warning("MCP auth: Invalid or expired session token")
+        return None
+
+
+async def get_authenticated_user_id(session_token: str | None = None) -> str | None:
+    """Get authenticated user_id from session token or context.
+
+    Priority:
+    1. Session token (if provided and valid)
+    2. Context (from middleware - JWT or API key auth)
+
+    Args:
+        session_token: Optional ChatKit session token
+
+    Returns:
+        The user_id if authenticated, None otherwise
+    """
+    # First try session token if provided
+    if session_token:
+        user_id = await validate_session_token(session_token)
+        if user_id:
+            return user_id
+
+    # Fall back to context (from middleware)
+    return get_user_id_from_context()
+
+
+# ============================================================================
+# Tool implementations with session_token support
+# ============================================================================
+
+@mcp.tool
+async def add_task(
     title: str,
+    session_token: str | None = None,
     description: str | None = None,
     priority: str = "medium",
     due_date: str | None = None,
@@ -138,14 +203,14 @@ async def _add_task_impl(
 
     Args:
         title: Task title (required, max 200 characters)
+        session_token: Authentication token (required for ChatKit)
         description: Optional task description
         priority: Task priority - "high", "medium" (default), or "low"
         due_date: Optional due date in ISO format (e.g., "2026-01-20")
     """
-    try:
-        user_id = get_user_id()
-    except ValueError:
-        return "add_task: error - authentication required"
+    user_id = await get_authenticated_user_id(session_token)
+    if not user_id:
+        return "add_task: error - authentication required. Please provide a valid session_token."
 
     # Validate inputs
     if not title or not title.strip():
@@ -184,24 +249,8 @@ async def _add_task_impl(
 
 
 @mcp.tool
-async def add_task(
-    title: str,
-    description: str | None = None,
-    priority: str = "medium",
-    due_date: str | None = None,
-) -> str:
-    """Add a new task.
-
-    Args:
-        title: Task title (required, max 200 characters)
-        description: Optional task description
-        priority: Task priority - "high", "medium" (default), or "low"
-        due_date: Optional due date in ISO format (e.g., "2026-01-20")
-    """
-    return await _add_task_impl(title, description, priority, due_date)
-
-
-async def _list_tasks_impl(
+async def list_tasks(
+    session_token: str | None = None,
     status: str = "all",
     search: str | None = None,
     sort_by: str = "created_at",
@@ -209,14 +258,14 @@ async def _list_tasks_impl(
     """List all tasks with optional filtering.
 
     Args:
+        session_token: Authentication token (required for ChatKit)
         status: Filter by "all", "pending", or "completed"
         search: Optional search term for title matching
         sort_by: Sort order - "created_at" (newest first) or "due_date" (soonest first)
     """
-    try:
-        user_id = get_user_id()
-    except ValueError:
-        return "list_tasks: error - authentication required"
+    user_id = await get_authenticated_user_id(session_token)
+    if not user_id:
+        return "list_tasks: error - authentication required. Please provide a valid session_token."
 
     async with get_session() as session:
         service = TaskService(session)
@@ -253,13 +302,13 @@ async def _list_tasks_impl(
             # Format due date with status indicators
             due_str = ""
             if t.due_date:
-                due_date = t.due_date.date()
-                if due_date < today and not t.completed:
-                    due_str = f" [OVERDUE: {due_date}]"
-                elif due_date == today:
+                task_due_date = t.due_date.date()
+                if task_due_date < today and not t.completed:
+                    due_str = f" [OVERDUE: {task_due_date}]"
+                elif task_due_date == today:
                     due_str = " [TODAY]"
                 else:
-                    due_str = f" [due: {due_date}]"
+                    due_str = f" [due: {task_due_date}]"
 
             lines.append(f"  [{priority_icon}] #{t.id} {status_icon} {t.title}{due_str}")
 
@@ -267,27 +316,19 @@ async def _list_tasks_impl(
 
 
 @mcp.tool
-async def list_tasks(
-    status: str = "all",
-    search: str | None = None,
-    sort_by: str = "created_at",
+async def complete_task(
+    task_id: str,
+    session_token: str | None = None,
 ) -> str:
-    """List all tasks with optional filtering.
+    """Mark a task as completed.
 
     Args:
-        status: Filter by "all", "pending", or "completed"
-        search: Optional search term for title matching
-        sort_by: Sort order - "created_at" (newest first) or "due_date" (soonest first)
+        task_id: The task UUID to complete
+        session_token: Authentication token (required for ChatKit)
     """
-    return await _list_tasks_impl(status, search, sort_by)
-
-
-async def _complete_task_impl(task_id: str) -> str:
-    """Mark a task as completed - implementation."""
-    try:
-        user_id = get_user_id()
-    except ValueError:
-        return "complete_task: error - authentication required"
+    user_id = await get_authenticated_user_id(session_token)
+    if not user_id:
+        return "complete_task: error - authentication required. Please provide a valid session_token."
 
     # Validate task_id format
     try:
@@ -315,21 +356,19 @@ async def _complete_task_impl(task_id: str) -> str:
 
 
 @mcp.tool
-async def complete_task(task_id: str) -> str:
-    """Mark a task as completed.
+async def delete_task(
+    task_id: str,
+    session_token: str | None = None,
+) -> str:
+    """Delete a task.
 
     Args:
-        task_id: The task UUID to complete
+        task_id: The task UUID to delete
+        session_token: Authentication token (required for ChatKit)
     """
-    return await _complete_task_impl(task_id)
-
-
-async def _delete_task_impl(task_id: str) -> str:
-    """Delete a task - implementation."""
-    try:
-        user_id = get_user_id()
-    except ValueError:
-        return "delete_task: error - authentication required"
+    user_id = await get_authenticated_user_id(session_token)
+    if not user_id:
+        return "delete_task: error - authentication required. Please provide a valid session_token."
 
     # Validate task_id format
     try:
@@ -355,17 +394,9 @@ async def _delete_task_impl(task_id: str) -> str:
 
 
 @mcp.tool
-async def delete_task(task_id: str) -> str:
-    """Delete a task.
-
-    Args:
-        task_id: The task UUID to delete
-    """
-    return await _delete_task_impl(task_id)
-
-
-async def _update_task_impl(
+async def update_task(
     task_id: str,
+    session_token: str | None = None,
     title: str | None = None,
     description: str | None = None,
     priority: str | None = None,
@@ -375,15 +406,15 @@ async def _update_task_impl(
 
     Args:
         task_id: The task UUID to update (required)
+        session_token: Authentication token (required for ChatKit)
         title: New title (optional, max 200 characters)
         description: New description (optional)
         priority: New priority - "high", "medium", or "low" (optional)
         due_date: New due date in ISO format (optional, e.g., "2026-01-20")
     """
-    try:
-        user_id = get_user_id()
-    except ValueError:
-        return "update_task: error - authentication required"
+    user_id = await get_authenticated_user_id(session_token)
+    if not user_id:
+        return "update_task: error - authentication required. Please provide a valid session_token."
 
     # Validate task_id format
     try:
@@ -432,26 +463,6 @@ async def _update_task_impl(
             return f"update_task: error - failed to update task #{task_id}"
 
         return f"update_task: success - updated task #{task.id} '{task.title}'"
-
-
-@mcp.tool
-async def update_task(
-    task_id: str,
-    title: str | None = None,
-    description: str | None = None,
-    priority: str | None = None,
-    due_date: str | None = None,
-) -> str:
-    """Update an existing task.
-
-    Args:
-        task_id: The task UUID to update (required)
-        title: New title (optional, max 200 characters)
-        description: New description (optional)
-        priority: New priority - "high", "medium", or "low" (optional)
-        due_date: New due date in ISO format (optional, e.g., "2026-01-20")
-    """
-    return await _update_task_impl(task_id, title, description, priority, due_date)
 
 
 # Create the http_app once so we can share its lifespan

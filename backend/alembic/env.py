@@ -11,6 +11,9 @@ from alembic import context
 
 # Import all models to ensure they are registered with SQLModel
 from app.models.task import Task  # noqa: F401
+from app.models.conversation import Conversation  # noqa: F401
+from app.models.message import Message  # noqa: F401
+from app.models.chatkit_session import ChatkitSession  # noqa: F401
 from app.config.settings import get_settings
 
 config = context.config
@@ -25,6 +28,16 @@ if config.config_file_name is not None:
 
 target_metadata = SQLModel.metadata
 
+# Tables managed by Better Auth - exclude from autogenerate
+EXCLUDED_TABLES = {"user", "session", "account", "verification", "jwks"}
+
+
+def include_object(object, name, type_, reflected, compare_to):
+    """Filter out Better Auth tables from autogenerate."""
+    if type_ == "table" and name in EXCLUDED_TABLES:
+        return False
+    return True
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
@@ -34,6 +47,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -41,7 +55,11 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        include_object=include_object,
+    )
 
     with context.begin_transaction():
         context.run_migrations()
