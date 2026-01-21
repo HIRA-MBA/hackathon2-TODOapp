@@ -1,10 +1,9 @@
 """FastMCP server for ChatKit integration.
 
 Exposes task operations as MCP tools, reusing TaskService for all CRUD.
-Supports multiple authentication modes:
-1. JWT Bearer token via Authorization header
-2. API Key + X-User-ID header for workflow authentication
-3. Session token parameter for ChatKit tool calls
+Authentication is handled via:
+1. JWT Bearer token via Authorization header (direct API calls)
+2. API Key + X-User-ID header (ChatKit workflow calls)
 """
 
 import logging
@@ -27,23 +26,18 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # Context variable to store authenticated user_id for current request
-# Default to None - authentication is REQUIRED for task operations
 current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
 
 mcp = FastMCP(
     name="TodoMCP",
     instructions="""Help users manage their todo list. Use tools to add, list, update, complete, and delete tasks.
-Tasks can have priority (high/medium/low) and due dates.
-
-IMPORTANT: All tools require a session_token parameter for authentication.
-Always include the session_token when calling any tool.""",
+Tasks can have priority (high/medium/low) and due dates.""",
 )
 
 
 def verify_api_key(token: str) -> bool:
     """Verify if token matches the MCP API key."""
     if not settings.mcp_api_key:
-        # No API key configured, allow all requests
         return True
     return token == settings.mcp_api_key
 
@@ -67,15 +61,12 @@ def verify_jwt(token: str) -> str | None:
 
 
 class AuthMiddleware:
-    """Pure ASGI middleware to extract user_id from auth header.
+    """ASGI middleware to extract user_id from auth header or query param.
 
-    Does NOT block requests - just extracts user context for tools.
-    Auth validation happens at tool execution time - tools MUST check auth.
-
-    Supports two authentication modes:
+    Supports:
     1. JWT Bearer token - extracts user_id from token's 'sub' claim
     2. API Key + X-User-ID header - for ChatKit workflow authentication
-       When a valid API key is present, trusts X-User-ID header for user context
+    3. API Key + user_id query parameter - alternative for workflows that can't set headers
     """
 
     def __init__(self, app):
@@ -86,34 +77,37 @@ class AuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Extract headers
         headers = dict(scope.get("headers", []))
         auth_header = headers.get(b"authorization", b"").decode()
         user_id_header = headers.get(b"x-user-id", b"").decode()
 
-        # SECURITY: No fallback user - must authenticate
+        # Also check query string for user_id
+        query_string = scope.get("query_string", b"").decode()
+        user_id_param = ""
+        if query_string:
+            from urllib.parse import parse_qs
+            params = parse_qs(query_string)
+            user_id_param = params.get("user_id", [""])[0]
+
         user_id = None
 
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
             if verify_api_key(token):
-                # API key auth - trust X-User-ID header for user context
-                # This enables ChatKit workflows to act on behalf of users
+                # API key auth - trust X-User-ID header or query param
                 if user_id_header:
                     user_id = user_id_header
                     logger.info(f"MCP auth: API key + X-User-ID header for user {user_id}")
-                else:
-                    logger.info("MCP auth: Valid API key but no X-User-ID header")
+                elif user_id_param:
+                    user_id = user_id_param
+                    logger.info(f"MCP auth: API key + user_id param for user {user_id}")
             else:
                 # Try JWT authentication
                 extracted_id = verify_jwt(token)
                 if extracted_id:
                     user_id = extracted_id
                     logger.info(f"MCP auth: JWT user {user_id}")
-                else:
-                    logger.warning("MCP auth: Invalid token, no user context")
 
-        # Set context and proceed - tools will check for valid user_id
         ctx_token = current_user_id.set(user_id)
         try:
             await self.app(scope, receive, send)
@@ -121,9 +115,16 @@ class AuthMiddleware:
             current_user_id.reset(ctx_token)
 
 
-def get_user_id_from_context() -> str | None:
-    """Get current authenticated user_id from context (may be None)."""
-    return current_user_id.get()
+def get_user_id() -> str:
+    """Get current authenticated user_id from context.
+
+    Raises:
+        ValueError: If no authenticated user context is available.
+    """
+    user_id = current_user_id.get()
+    if not user_id:
+        raise ValueError("Authentication required")
+    return user_id
 
 
 @asynccontextmanager
@@ -138,109 +139,69 @@ async def get_session():
             raise
 
 
-async def validate_session_token(token: str) -> str | None:
-    """Validate a ChatKit session token and return the user_id.
-
-    Args:
-        token: The session token to validate
-
-    Returns:
-        The user_id if token is valid, None otherwise
-    """
+async def get_active_session_for_user(user_id: str) -> bool:
+    """Check if user has an active ChatKit session."""
     async with get_session() as session:
         stmt = select(ChatkitSession).where(
-            ChatkitSession.token == token,
+            ChatkitSession.user_id == user_id,
             ChatkitSession.revoked == False,
             ChatkitSession.expires_at > datetime.utcnow(),
-        )
+        ).limit(1)
         result = await session.execute(stmt)
-        session_record = result.scalar_one_or_none()
-
-        if session_record:
-            logger.info(f"MCP auth: Valid session token for user {session_record.user_id}")
-            return session_record.user_id
-
-        logger.warning("MCP auth: Invalid or expired session token")
-        return None
-
-
-async def get_authenticated_user_id(session_token: str | None = None) -> str | None:
-    """Get authenticated user_id from session token or context.
-
-    Priority:
-    1. Session token (if provided and valid)
-    2. Context (from middleware - JWT or API key auth)
-
-    Args:
-        session_token: Optional ChatKit session token
-
-    Returns:
-        The user_id if authenticated, None otherwise
-    """
-    # First try session token if provided
-    if session_token:
-        user_id = await validate_session_token(session_token)
-        if user_id:
-            return user_id
-
-    # Fall back to context (from middleware)
-    return get_user_id_from_context()
+        return result.scalar_one_or_none() is not None
 
 
 # ============================================================================
-# Tool implementations with session_token support
+# MCP Tools - Simple signatures for OpenAI integration
 # ============================================================================
 
 @mcp.tool
 async def add_task(
     title: str,
-    session_token: str | None = None,
-    description: str | None = None,
+    description: str = "",
     priority: str = "medium",
-    due_date: str | None = None,
+    due_date: str = "",
 ) -> str:
-    """Add a new task.
+    """Add a new task to the todo list.
 
     Args:
-        title: Task title (required, max 200 characters)
-        session_token: Authentication token (required for ChatKit)
-        description: Optional task description
-        priority: Task priority - "high", "medium" (default), or "low"
-        due_date: Optional due date in ISO format (e.g., "2026-01-20")
+        title: Task title (required)
+        description: Task description
+        priority: Priority level - high, medium, or low
+        due_date: Due date in YYYY-MM-DD format
     """
-    user_id = await get_authenticated_user_id(session_token)
-    if not user_id:
-        return "add_task: error - authentication required. Please provide a valid session_token."
+    try:
+        user_id = get_user_id()
+    except ValueError:
+        return "Error: Not authenticated. Please log in to manage tasks."
 
-    # Validate inputs
     if not title or not title.strip():
-        return "add_task: error - title cannot be empty"
+        return "Error: Task title cannot be empty."
 
     if len(title) > 200:
-        return "add_task: error - title must be 200 characters or less"
+        return "Error: Task title must be 200 characters or less."
 
     if priority not in ("high", "medium", "low"):
-        return f"add_task: error - priority must be 'high', 'medium', or 'low', got '{priority}'"
+        priority = "medium"
 
-    # Parse due_date if provided
     parsed_due_date = None
     if due_date:
         try:
             parsed_due_date = datetime.fromisoformat(due_date.replace("Z", "+00:00"))
         except ValueError:
-            return f"add_task: error - invalid due_date format: {due_date}. Use ISO format (e.g., 2026-01-20)"
+            return f"Error: Invalid date format '{due_date}'. Use YYYY-MM-DD format."
 
     async with get_session() as session:
         service = TaskService(session)
         data = TaskCreate(
             title=title.strip(),
-            description=description,
+            description=description if description else None,
             priority=priority,
             due_date=parsed_due_date,
         )
         task = await service.create_task(user_id, data)
 
-        result = f"add_task: success - created task #{task.id} '{task.title}'"
+        result = f"Created task: {task.title}"
         if task.priority != "medium":
             result += f" (priority: {task.priority})"
         if task.due_date:
@@ -250,222 +211,194 @@ async def add_task(
 
 @mcp.tool
 async def list_tasks(
-    session_token: str | None = None,
-    status: str = "all",
-    search: str | None = None,
-    sort_by: str = "created_at",
+    filter_status: str = "all",
+    search: str = "",
 ) -> str:
-    """List all tasks with optional filtering.
+    """List all tasks, optionally filtered.
 
     Args:
-        session_token: Authentication token (required for ChatKit)
-        status: Filter by "all", "pending", or "completed"
-        search: Optional search term for title matching
-        sort_by: Sort order - "created_at" (newest first) or "due_date" (soonest first)
+        filter_status: Filter by status - all, pending, or completed
+        search: Search term to filter tasks by title
     """
-    user_id = await get_authenticated_user_id(session_token)
-    if not user_id:
-        return "list_tasks: error - authentication required. Please provide a valid session_token."
+    try:
+        user_id = get_user_id()
+    except ValueError:
+        return "Error: Not authenticated. Please log in to view tasks."
 
     async with get_session() as session:
         service = TaskService(session)
-        tasks = await service.list_tasks(user_id, sort_by=sort_by)
+        tasks = await service.list_tasks(user_id)
 
-        # Filter by status
-        if status == "pending":
+        if filter_status == "pending":
             tasks = [t for t in tasks if not t.completed]
-        elif status == "completed":
+        elif filter_status == "completed":
             tasks = [t for t in tasks if t.completed]
 
-        # Filter by search term
         if search:
             search_lower = search.lower()
             tasks = [t for t in tasks if search_lower in t.title.lower()]
 
         if not tasks:
-            if status == "pending":
-                return "list_tasks: No pending tasks found."
-            elif status == "completed":
-                return "list_tasks: No completed tasks found."
+            if filter_status == "pending":
+                return "No pending tasks found."
+            elif filter_status == "completed":
+                return "No completed tasks found."
             elif search:
-                return f"list_tasks: No tasks matching '{search}' found."
-            else:
-                return "list_tasks: No tasks found. You can add one by asking me!"
+                return f"No tasks matching '{search}' found."
+            return "No tasks found. Would you like to add one?"
 
-        # Format task list with priority and due date indicators
-        lines = [f"list_tasks: Found {len(tasks)} task(s):"]
+        lines = [f"Found {len(tasks)} task(s):"]
         today = datetime.now().date()
-        for t in tasks:
-            status_icon = "[DONE]" if t.completed else "[    ]"
-            priority_icon = {"high": "!", "medium": "-", "low": "."}.get(t.priority, "-")
 
-            # Format due date with status indicators
+        for t in tasks:
+            status = "DONE" if t.completed else "TODO"
+            priority_marker = {"high": "!", "medium": "", "low": "."}.get(t.priority, "")
+
             due_str = ""
             if t.due_date:
-                task_due_date = t.due_date.date()
-                if task_due_date < today and not t.completed:
-                    due_str = f" [OVERDUE: {task_due_date}]"
-                elif task_due_date == today:
+                task_due = t.due_date.date()
+                if task_due < today and not t.completed:
+                    due_str = f" [OVERDUE]"
+                elif task_due == today:
                     due_str = " [TODAY]"
                 else:
-                    due_str = f" [due: {task_due_date}]"
+                    due_str = f" [due: {task_due}]"
 
-            lines.append(f"  [{priority_icon}] #{t.id} {status_icon} {t.title}{due_str}")
+            lines.append(f"  {priority_marker}[{status}] {t.title}{due_str} (ID: {t.id})")
 
         return "\n".join(lines)
 
 
 @mcp.tool
-async def complete_task(
-    task_id: str,
-    session_token: str | None = None,
-) -> str:
+async def complete_task(task_id: str) -> str:
     """Mark a task as completed.
 
     Args:
-        task_id: The task UUID to complete
-        session_token: Authentication token (required for ChatKit)
+        task_id: The ID of the task to complete
     """
-    user_id = await get_authenticated_user_id(session_token)
-    if not user_id:
-        return "complete_task: error - authentication required. Please provide a valid session_token."
+    try:
+        user_id = get_user_id()
+    except ValueError:
+        return "Error: Not authenticated. Please log in to manage tasks."
 
-    # Validate task_id format
     try:
         uuid = UUID(task_id)
     except ValueError:
-        return f"complete_task: error - invalid task ID format: {task_id}"
+        return f"Error: Invalid task ID format."
 
     async with get_session() as session:
         service = TaskService(session)
-
-        # First check if task exists
         task = await service.get_task(uuid, user_id)
+
         if not task:
-            return f"complete_task: error - task #{task_id} not found"
+            return f"Error: Task not found."
 
         if task.completed:
-            return f"complete_task: info - task '{task.title}' is already completed"
+            return f"Task '{task.title}' is already completed."
 
-        # Toggle to complete
-        updated_task = await service.toggle_task(uuid, user_id)
-        if not updated_task:
-            return f"complete_task: error - failed to complete task #{task_id}"
-
-        return f"complete_task: success - marked '{updated_task.title}' as done"
+        updated = await service.toggle_task(uuid, user_id)
+        if updated:
+            return f"Completed: {updated.title}"
+        return "Error: Could not complete task."
 
 
 @mcp.tool
-async def delete_task(
-    task_id: str,
-    session_token: str | None = None,
-) -> str:
-    """Delete a task.
+async def delete_task(task_id: str) -> str:
+    """Delete a task permanently.
 
     Args:
-        task_id: The task UUID to delete
-        session_token: Authentication token (required for ChatKit)
+        task_id: The ID of the task to delete
     """
-    user_id = await get_authenticated_user_id(session_token)
-    if not user_id:
-        return "delete_task: error - authentication required. Please provide a valid session_token."
+    try:
+        user_id = get_user_id()
+    except ValueError:
+        return "Error: Not authenticated. Please log in to manage tasks."
 
-    # Validate task_id format
     try:
         uuid = UUID(task_id)
     except ValueError:
-        return f"delete_task: error - invalid task ID format: {task_id}"
+        return f"Error: Invalid task ID format."
 
     async with get_session() as session:
         service = TaskService(session)
-
-        # Get task title before deletion for confirmation message
         task = await service.get_task(uuid, user_id)
+
         if not task:
-            return f"delete_task: error - task #{task_id} not found"
+            return f"Error: Task not found."
 
         task_title = task.title
         deleted = await service.delete_task(uuid, user_id)
 
-        if not deleted:
-            return f"delete_task: error - failed to delete task #{task_id}"
-
-        return f"delete_task: success - deleted task '{task_title}'"
+        if deleted:
+            return f"Deleted: {task_title}"
+        return "Error: Could not delete task."
 
 
 @mcp.tool
 async def update_task(
     task_id: str,
-    session_token: str | None = None,
-    title: str | None = None,
-    description: str | None = None,
-    priority: str | None = None,
-    due_date: str | None = None,
+    title: str = "",
+    description: str = "",
+    priority: str = "",
+    due_date: str = "",
 ) -> str:
     """Update an existing task.
 
     Args:
-        task_id: The task UUID to update (required)
-        session_token: Authentication token (required for ChatKit)
-        title: New title (optional, max 200 characters)
-        description: New description (optional)
-        priority: New priority - "high", "medium", or "low" (optional)
-        due_date: New due date in ISO format (optional, e.g., "2026-01-20")
+        task_id: The ID of the task to update
+        title: New title (leave empty to keep current)
+        description: New description (leave empty to keep current)
+        priority: New priority - high, medium, or low (leave empty to keep current)
+        due_date: New due date in YYYY-MM-DD format (leave empty to keep current)
     """
-    user_id = await get_authenticated_user_id(session_token)
-    if not user_id:
-        return "update_task: error - authentication required. Please provide a valid session_token."
+    try:
+        user_id = get_user_id()
+    except ValueError:
+        return "Error: Not authenticated. Please log in to manage tasks."
 
-    # Validate task_id format
     try:
         uuid = UUID(task_id)
     except ValueError:
-        return f"update_task: error - invalid task ID format: {task_id}"
+        return f"Error: Invalid task ID format."
 
-    # Validate that at least one field is provided
-    if title is None and description is None and priority is None and due_date is None:
-        return "update_task: error - must provide at least one field to update"
+    # Check at least one field to update
+    if not any([title, description, priority, due_date]):
+        return "Error: Please specify at least one field to update."
 
-    # Validate title length if provided
-    if title is not None and len(title) > 200:
-        return "update_task: error - title must be 200 characters or less"
+    if priority and priority not in ("high", "medium", "low"):
+        return f"Error: Priority must be high, medium, or low."
 
-    # Validate priority if provided
-    if priority is not None and priority not in ("high", "medium", "low"):
-        return f"update_task: error - priority must be 'high', 'medium', or 'low', got '{priority}'"
-
-    # Parse due_date if provided
     parsed_due_date = None
     if due_date:
         try:
             parsed_due_date = datetime.fromisoformat(due_date.replace("Z", "+00:00"))
         except ValueError:
-            return f"update_task: error - invalid due_date format: {due_date}. Use ISO format (e.g., 2026-01-20)"
+            return f"Error: Invalid date format. Use YYYY-MM-DD."
 
     async with get_session() as session:
         service = TaskService(session)
 
-        # Check if task exists
-        existing_task = await service.get_task(uuid, user_id)
-        if not existing_task:
-            return f"update_task: error - task #{task_id} not found"
+        existing = await service.get_task(uuid, user_id)
+        if not existing:
+            return f"Error: Task not found."
 
-        # Build update data
         update_data = TaskUpdate(
-            title=title,
-            description=description,
-            priority=priority,
+            title=title if title else None,
+            description=description if description else None,
+            priority=priority if priority else None,
             due_date=parsed_due_date,
         )
 
         task = await service.update_task(uuid, user_id, update_data)
-        if not task:
-            return f"update_task: error - failed to update task #{task_id}"
+        if task:
+            return f"Updated: {task.title}"
+        return "Error: Could not update task."
 
-        return f"update_task: success - updated task #{task.id} '{task.title}'"
 
+# ============================================================================
+# App factory
+# ============================================================================
 
-# Create the http_app once so we can share its lifespan
 _mcp_http_app = None
 
 
@@ -479,5 +412,4 @@ def get_mcp_http_app():
 
 def create_mcp_app():
     """Create MCP app with auth middleware."""
-    # Use the singleton http_app
     return AuthMiddleware(get_mcp_http_app())
