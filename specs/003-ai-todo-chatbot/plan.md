@@ -1,22 +1,25 @@
 # Implementation Plan: AI-Powered Todo Chatbot (Phase 3)
 
-**Branch**: `003-ai-todo-chatbot` | **Date**: 2026-01-04 | **Spec**: [spec.md](./spec.md)
+**Branch**: `003-ai-todo-chatbot` | **Date**: 2026-01-04 | **Updated**: 2026-01-22 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/003-ai-todo-chatbot/spec.md`
 
 ## Summary
 
-Implement an AI-powered chatbot that enables natural language task management through conversation. Users can create, query, update, complete, and delete tasks via chat messages. The system uses OpenAI Agents SDK for natural language understanding, MCP tools for task operations, and RAG patterns to ground responses in user data (tasks and conversation history).
+Implement an AI-powered chatbot that enables natural language task management through conversation. Users can create, query, update, complete, and delete tasks via chat messages. The system uses **OpenAI ChatKit** for the frontend widget and conversation management, with a **FastMCP HTTP server** exposing task operations as MCP tools that ChatKit's workflow can invoke.
+
+> **Architecture Note (2026-01-22)**: Implementation pivoted from custom SSE/Agent architecture to OpenAI ChatKit for faster delivery and built-in conversation management.
 
 ## Technical Context
 
 **Language/Version**: Python 3.13+
-**Primary Dependencies**: FastAPI, OpenAI Agents SDK, SQLModel, SSE-Starlette
-**Storage**: Neon PostgreSQL (existing) - add Conversation and Message tables
+**Primary Dependencies**: FastAPI, FastMCP, SQLModel
+**Frontend**: OpenAI ChatKit (`@openai/chatkit-react`)
+**Storage**: Neon PostgreSQL (existing) - ChatKit session tokens table added
 **Testing**: pytest, pytest-asyncio
 **Target Platform**: Linux server / Windows dev
 **Project Type**: Web (frontend + backend monorepo)
 **Performance Goals**: <5s task creation, <3s query response (per SC-001, SC-002)
-**Constraints**: Stateless per request, 20 message context limit, 20 task context limit
+**Constraints**: Stateless per request, MCP tools scoped by user authentication
 **Scale/Scope**: 100 concurrent chat sessions (per SC-005)
 
 ## Constitution Check
@@ -38,10 +41,11 @@ Implement an AI-powered chatbot that enables natural language task management th
 | Backend Framework | FastAPI | FastAPI | ✅ |
 | ORM | SQLModel | SQLModel | ✅ |
 | Database | Neon PostgreSQL | Neon PostgreSQL | ✅ |
-| AI Orchestration | OpenAI Agents SDK | OpenAI Agents SDK | ✅ |
-| AI Tools | MCP SDK | function_tool decorator | ✅ |
-| Frontend | Next.js 16+ | Next.js 15.x (upgrade pending) | ⚠️ |
-| Auth | Better Auth JWT | Reuse Phase 2 | ✅ |
+| AI Orchestration | OpenAI | OpenAI ChatKit + Platform Workflow | ✅ |
+| AI Tools | MCP | FastMCP HTTP Server | ✅ |
+| Frontend Chat | - | OpenAI ChatKit React Widget | ✅ |
+| Frontend Framework | Next.js | Next.js 15.x | ✅ |
+| Auth | Better Auth JWT | Reuse Phase 2 + MCP token auth | ✅ |
 
 ## Project Structure
 
@@ -64,305 +68,282 @@ backend/
 │   ├── api/routes/
 │   │   ├── health.py        # [existing] Health check
 │   │   ├── tasks.py         # [existing] Task CRUD REST API
-│   │   └── chat.py          # [NEW] Chat endpoint with SSE streaming
+│   │   └── chatkit.py       # [NEW] ChatKit session token endpoint
 │   ├── services/
-│   │   ├── task_service.py      # [existing] Task CRUD operations
-│   │   ├── conversation_service.py  # [NEW] Conversation/Message persistence
-│   │   └── chat_service.py      # [NEW] Agent orchestration and context
+│   │   ├── task_service.py           # [existing] Task CRUD operations
+│   │   └── chatkit_session_service.py # [NEW] ChatKit session token management
 │   ├── models/
-│   │   ├── task.py          # [existing] Task entity
-│   │   ├── conversation.py  # [NEW] Conversation entity
-│   │   └── message.py       # [NEW] Message entity
-│   ├── schemas/
-│   │   ├── task.py          # [existing] Task DTOs
-│   │   └── chat.py          # [NEW] Chat request/response DTOs
-│   ├── tools/
-│   │   └── task_tools.py    # [NEW] MCP tools for task operations
+│   │   ├── task.py              # [existing] Task entity
+│   │   └── chatkit_session.py   # [NEW] ChatKit session token entity
+│   ├── mcp/
+│   │   └── server.py        # [NEW] FastMCP server with task tools
 │   ├── agent/
-│   │   ├── context.py       # [NEW] UserContext dataclass
-│   │   ├── prompts.py       # [NEW] System prompts
-│   │   └── todo_agent.py    # [NEW] Agent configuration
+│   │   └── context.py       # [NEW] UserContext dataclass
+│   ├── middleware/
+│   │   └── rate_limit.py    # [NEW] Rate limiting middleware
 │   ├── dependencies/
 │   │   ├── auth.py          # [existing] JWT validation
 │   │   └── database.py      # [existing] DB session
 │   ├── config/
-│   │   └── settings.py      # [modify] Add OpenAI API key
-│   └── main.py              # [modify] Register chat routes
+│   │   └── settings.py      # [modify] Add MCP and ChatKit settings
+│   └── main.py              # [modify] Mount MCP server at /mcp
 ├── alembic/versions/
-│   ├── 001_create_task_table.py         # [existing]
-│   ├── 002_change_user_id_to_string.py  # [existing]
-│   ├── 003_create_conversation_table.py # [NEW]
-│   └── 004_create_message_table.py      # [NEW]
+│   ├── 001_create_task_table.py              # [existing]
+│   ├── 002_change_user_id_to_string.py       # [existing]
+│   └── 2622ddabaf3c_add_chatkit_session_table.py # [NEW]
 └── tests/
-    ├── test_chat_endpoint.py    # [NEW] Chat API tests
-    ├── test_task_tools.py       # [NEW] MCP tools tests
-    └── test_conversation_service.py  # [NEW] Service tests
+    └── test_mcp_tools.py    # [NEW] MCP tools tests
 
 frontend/
 ├── src/
 │   ├── app/
 │   │   ├── (protected)/
 │   │   │   ├── dashboard/   # [existing] Task management UI
-│   │   │   └── chat/        # [NEW] Chat page
-│   │   │       └── page.tsx # [NEW] Chat interface
+│   │   │   └── chat/        # [NEW] Chat page with ChatKit widget
+│   │   │       └── page.tsx # [NEW] ChatKit container
 │   │   └── api/
-│   │       └── chat/        # [NEW] Chat API route (proxy to backend)
-│   │           └── route.ts # [NEW] SSE proxy
+│   │       └── chatkit/
+│   │           └── session/
+│   │               └── route.ts # [NEW] ChatKit session creation endpoint
 │   ├── components/
-│   │   ├── chat/            # [NEW] Chat components
-│   │   │   ├── chat-container.tsx   # [NEW] Main chat wrapper
-│   │   │   ├── message-list.tsx     # [NEW] Message display
-│   │   │   ├── message-item.tsx     # [NEW] Individual message
-│   │   │   ├── chat-input.tsx       # [NEW] Input with send button
-│   │   │   └── tool-result.tsx      # [NEW] Tool execution display
+│   │   ├── chat/
+│   │   │   └── chatkit-container.tsx # [NEW] ChatKit widget wrapper
 │   │   └── navbar.tsx       # [modify] Add chat link
-│   ├── hooks/
-│   │   └── use-chat.ts      # [NEW] Chat state management
 │   └── lib/
-│       └── chat-api.ts      # [NEW] Chat API client
-└── package.json             # [no changes - use existing deps]
+│       └── auth.ts          # [existing] Better Auth client
+└── package.json             # [modify] Add @openai/chatkit-react
 ```
 
-**Structure Decision**: Extends existing web application structure (Option 2 from template). New chat functionality added as parallel feature to existing task management, sharing auth and database infrastructure.
+**Structure Decision**: Uses OpenAI ChatKit for the chat UI instead of custom components. ChatKit manages conversation history internally while our FastMCP server provides task operations as external tools.
 
 ## Data Model
 
-### Conversation Table
+> **Note**: Conversation and message persistence is handled by OpenAI ChatKit internally. We only store session tokens for MCP authentication.
+
+### ChatKit Session Table
 
 ```sql
-CREATE TABLE conversation (
+CREATE TABLE chatkit_session (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id VARCHAR(64) NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
+    token VARCHAR(255) NOT NULL UNIQUE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    last_activity_at TIMESTAMP NOT NULL DEFAULT NOW()
+    expires_at TIMESTAMP NOT NULL,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE
 );
 
-CREATE INDEX idx_conversation_user_id ON conversation(user_id);
+CREATE INDEX idx_chatkit_session_token ON chatkit_session(token);
+CREATE INDEX idx_chatkit_session_user_id ON chatkit_session(user_id);
 ```
 
-### Message Table
-
-```sql
-CREATE TABLE message (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    conversation_id UUID NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
-    role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'tool')),
-    content TEXT NOT NULL,
-    metadata JSONB,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_message_conversation_created ON message(conversation_id, created_at);
-```
+**Purpose**: Session tokens authenticate MCP tool calls from ChatKit. When ChatKit invokes our MCP server, we validate the session token to identify the user.
 
 ## API Contract
 
-### POST /api/chat
+### Frontend: POST /api/chatkit/session
 
-**Request:**
+Creates a ChatKit session for the authenticated user.
+
+**Request:** (no body required, uses session cookie)
+
+**Response:**
 ```json
 {
-  "message": "Add buy groceries to my list"
+  "client_secret": "chatkit_session_xxx..."
 }
 ```
 
-**Response (SSE Stream):**
-```
-data: {"type": "thinking", "content": "Understanding your request..."}
+### Backend: POST /api/chatkit/token
 
-data: {"type": "tool_call", "tool": "add_task", "status": "executing"}
+Creates a session token for MCP authentication.
 
-data: {"type": "tool_result", "tool": "add_task", "result": "success - created task 'buy groceries'"}
+**Request:** (JWT required in Authorization header)
 
-data: {"type": "response", "content": "I've added 'buy groceries' to your task list."}
-
-data: {"type": "done", "conversation_id": "uuid"}
-```
-
-**Response (Non-streaming fallback):**
+**Response:**
 ```json
 {
-  "response": "I've added 'buy groceries' to your task list.",
-  "tool_executions": [
-    {
-      "tool": "add_task",
-      "status": "success",
-      "result": "created task 'buy groceries'"
-    }
-  ],
-  "conversation_id": "uuid"
+  "token": "mcp_session_xxx..."
 }
 ```
+
+### MCP Server: /mcp (Streamable HTTP)
+
+FastMCP server mounted at `/mcp` endpoint. ChatKit's workflow calls this server when the AI needs to execute task operations.
+
+**Authentication**:
+- API Key via `Authorization: Bearer <MCP_API_KEY>` header
+- User identification via `X-User-ID` header or `user_id` query param
+- Fallback: `MCP_DEFAULT_USER_ID` environment variable (for testing)
 
 ## Agent Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Chat Endpoint                            │
-│  POST /api/chat (JWT required)                             │
+│                    Next.js Frontend                         │
+│  /chat page with ChatKit widget                            │
+│  Calls /api/chatkit/session to get client_secret           │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                 Context Assembly                            │
-│  1. Get/create conversation for user                       │
-│  2. Load last 20 messages                                  │
-│  3. Load user's tasks (up to 20)                           │
-│  4. Build system prompt with task context                  │
+│                 OpenAI ChatKit                              │
+│  - Manages conversation UI (messages, input, streaming)    │
+│  - Persists conversation history internally                │
+│  - Connects to OpenAI Platform Workflow                    │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                 OpenAI Agent                                │
-│  Model: gpt-4o-mini                                        │
-│  Tools: add_task, list_tasks, update_task,                 │
-│         complete_task, delete_task                         │
-│  Context: UserContext(user_id, email, db_session)          │
+│              OpenAI Platform Workflow                       │
+│  - Configured at platform.openai.com/agents                │
+│  - Model: gpt-4o-mini                                      │
+│  - MCP Server: https://your-backend.com/mcp                │
+│  - Tools: add_task, list_tasks, update_task,               │
+│           complete_task, delete_task                       │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                 MCP Tools Layer                             │
-│  - Receives UserContext via RunContextWrapper              │
-│  - Calls TaskService with user_id isolation                │
+│              FastMCP HTTP Server (/mcp)                     │
+│  - Mounted on FastAPI backend                              │
+│  - AuthMiddleware extracts user_id from headers            │
+│  - Tools call TaskService with user_id isolation           │
 │  - Returns structured string results                        │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                 Message Persistence                         │
-│  - Persist user message                                    │
-│  - Persist tool results (role='tool')                      │
-│  - Persist assistant response                              │
+│                    TaskService                              │
+│  - Existing Phase 2 service layer                          │
+│  - All CRUD operations scoped by user_id                   │
+│  - No direct database access by MCP tools                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+**Key Architectural Decisions:**
+1. **ChatKit manages conversations** - No custom conversation/message tables needed
+2. **MCP over HTTP** - FastMCP server exposed at `/mcp` for workflow tool calls
+3. **User auth via headers** - MCP server validates user via API key + X-User-ID header
+4. **Stateless tools** - MCP tools receive user context per request, no server-side session state
+
 ## MCP Tools Specification
+
+> **Implementation**: Tools are defined using FastMCP's `@mcp.tool` decorator in `backend/app/mcp/server.py`. User context is obtained from the request via AuthMiddleware.
 
 ### add_task
 ```python
-@function_tool
+@mcp.tool
 async def add_task(
-    ctx: RunContextWrapper[UserContext],
     title: str,
-    description: str | None = None
+    description: str = "",
+    priority: str = "medium",
+    due_date: str = "",
 ) -> str:
-    """Add a new task for the user.
+    """Add a new task to the todo list.
 
     Args:
-        title: The task title (required)
-        description: Optional task description
+        title: Task title (required)
+        description: Task description
+        priority: Priority level - high, medium, or low
+        due_date: Due date in YYYY-MM-DD format
 
     Returns:
-        "add_task: success - created task 'title'" or
-        "add_task: error - reason"
+        "Created task: {title}" or "Error: {reason}"
     """
 ```
 
 ### list_tasks
 ```python
-@function_tool
+@mcp.tool
 async def list_tasks(
-    ctx: RunContextWrapper[UserContext],
-    status: str = "all",
-    search: str | None = None
+    filter_status: str = "all",
+    search: str = "",
 ) -> str:
-    """List user's tasks with optional filtering.
+    """List all tasks, optionally filtered.
 
     Args:
-        status: Filter by status - "all", "pending", or "completed"
-        search: Optional search term for title matching
+        filter_status: Filter by status - all, pending, or completed
+        search: Search term to filter tasks by title
 
     Returns:
-        Formatted task list or "No tasks found"
+        Formatted task list with status indicators
     """
 ```
 
 ### update_task
 ```python
-@function_tool
+@mcp.tool
 async def update_task(
-    ctx: RunContextWrapper[UserContext],
     task_id: str,
-    title: str | None = None,
-    description: str | None = None
+    title: str = "",
+    description: str = "",
+    priority: str = "",
+    due_date: str = "",
 ) -> str:
-    """Update an existing task's title or description.
+    """Update an existing task.
 
     Args:
-        task_id: The task UUID to update
-        title: New title (optional)
-        description: New description (optional)
+        task_id: The ID of the task to update
+        title: New title (leave empty to keep current)
+        description: New description (leave empty to keep current)
+        priority: New priority - high, medium, or low
+        due_date: New due date in YYYY-MM-DD format
 
     Returns:
-        "update_task: success - updated task 'title'" or
-        "update_task: error - task not found"
+        "Updated: {title}" or "Error: {reason}"
     """
 ```
 
 ### complete_task
 ```python
-@function_tool
-async def complete_task(
-    ctx: RunContextWrapper[UserContext],
-    task_id: str
-) -> str:
+@mcp.tool
+async def complete_task(task_id: str) -> str:
     """Mark a task as completed.
 
     Args:
-        task_id: The task UUID to complete
+        task_id: The ID of the task to complete
 
     Returns:
-        "complete_task: success - marked 'title' as done" or
-        "complete_task: error - task not found"
+        "Completed: {title}" or "Error: {reason}"
     """
 ```
 
 ### delete_task
 ```python
-@function_tool
-async def delete_task(
-    ctx: RunContextWrapper[UserContext],
-    task_id: str
-) -> str:
-    """Delete a task.
+@mcp.tool
+async def delete_task(task_id: str) -> str:
+    """Delete a task permanently.
 
     Args:
-        task_id: The task UUID to delete
+        task_id: The ID of the task to delete
 
     Returns:
-        "delete_task: success - deleted task" or
-        "delete_task: error - task not found"
+        "Deleted: {title}" or "Error: {reason}"
     """
 ```
 
 ## System Prompt
 
+> **Note**: System prompt is configured in the OpenAI Platform Workflow at platform.openai.com/agents. The MCP server configuration includes the server URL and available tools.
+
 ```
 You are a helpful task management assistant. You help users manage their todo list through natural conversation.
 
-CURRENT USER TASKS:
-{formatted_task_list}
-
 CAPABILITIES:
-- Add new tasks (ask for clarification if the request is ambiguous)
+- Add new tasks with optional priority (high/medium/low) and due dates
 - List tasks (all, pending, or completed)
-- Update task titles or descriptions
+- Update task titles, descriptions, priority, or due dates
 - Mark tasks as complete
 - Delete tasks
 
 GUIDELINES:
 1. Always use the provided tools to modify tasks - never pretend to modify them
-2. When referencing tasks, use their ID number for precision
+2. When referencing tasks, use their ID for precision
 3. If a user's request is ambiguous, ask for clarification
 4. Confirm all modifications with a brief summary
 5. If a task operation fails, explain the issue clearly
 6. Be conversational but concise
-
-RESPONSE FORMAT:
-- Keep responses brief and helpful
-- Include task details when relevant (ID, title, status)
-- Use natural language, not technical jargon
+7. Parse natural language dates like "tomorrow", "next Friday", "in 3 days"
 ```
 
 ## Complexity Tracking
@@ -371,10 +352,10 @@ RESPONSE FORMAT:
 
 | Component | Complexity | Justification |
 |-----------|------------|---------------|
-| SSE Streaming | Medium | Required for responsive UX per SC-001/SC-002 |
-| Conversation Persistence | Low | Simple table design, single conversation per user |
+| ChatKit Integration | Low | Hosted widget, minimal frontend code |
+| FastMCP Server | Medium | HTTP transport with auth middleware |
 | MCP Tools | Low | Thin wrappers around existing TaskService |
-| Agent Config | Low | Standard OpenAI Agents SDK setup |
+| Session Token Auth | Medium | JWT signing and token validation |
 
 ## Dependencies to Add
 
@@ -383,36 +364,53 @@ RESPONSE FORMAT:
 ```toml
 dependencies = [
     # ... existing deps ...
-    "openai-agents>=0.0.10",       # OpenAI Agents SDK
-    "sse-starlette>=2.0.0",        # SSE streaming support
+    "fastmcp>=0.1.0",              # FastMCP server
+    "PyJWT>=2.8.0",                # JWT for MCP auth
 ]
+```
+
+### Frontend (package.json)
+
+```json
+{
+  "dependencies": {
+    "@openai/chatkit-react": "^0.1.0"
+  }
+}
 ```
 
 ### Environment Variables
 
 ```env
-# Add to backend/.env
-OPENAI_API_KEY=sk-...  # OpenAI API key for Agents SDK
+# Backend
+OPENAI_API_KEY=sk-...              # OpenAI API key
+MCP_API_KEY=your-mcp-api-key       # API key for MCP auth
+MCP_DEFAULT_USER_ID=               # Optional: default user for testing
+
+# Frontend
+OPENAI_API_KEY=sk-...              # For ChatKit session creation
+OPENAI_CHATKIT_WORKFLOW_ID=wf-...  # ChatKit workflow ID from platform
 ```
 
 ## Risk Mitigation
 
 | Risk | Mitigation |
 |------|------------|
-| AI Response Latency | SSE streaming provides progressive feedback |
-| Context Window Overflow | Fixed 20 message + 20 task limits |
+| AI Response Latency | ChatKit provides streaming by default |
+| MCP Auth Complexity | Multiple auth methods: API key + header, JWT, default user fallback |
 | Tool Execution Errors | Tools return error strings for agent interpretation |
-| Auth Token Expiry | Existing JWT refresh mechanism from Phase 2 |
+| Auth Token Expiry | Session tokens have 24h expiry, frontend re-fetches as needed |
+| ChatKit Service Outage | Graceful error display in UI with retry option |
 
 ## Success Criteria Mapping
 
-| Success Criteria | Implementation |
-|-----------------|----------------|
-| SC-001: <5s task creation | SSE streaming + gpt-4o-mini |
-| SC-002: <3s query response | Indexed queries + context caching |
-| SC-003: 95% grounded responses | RAG with task context in system prompt |
-| SC-004: Conversation persistence | Database-backed messages |
-| SC-005: 100 concurrent sessions | Stateless architecture |
-| SC-006: All 5 operations accessible | 5 MCP tools implemented |
-| SC-007: Tool metadata in responses | SSE events include tool results |
-| SC-008: No cross-user data leakage | user_id from JWT, scoped queries |
+| Success Criteria | Implementation | Measurement |
+|-----------------|----------------|-------------|
+| SC-001: <5s task creation | ChatKit streaming + gpt-4o-mini | Manual testing |
+| SC-002: <3s query response | Indexed DB queries | Manual testing |
+| SC-003: 95% grounded responses | MCP tools query real user data | Manual review of responses |
+| SC-004: Conversation persistence | ChatKit manages internally | Browser refresh test |
+| SC-005: 100 concurrent sessions | Stateless MCP server | Load testing (Phase 4) |
+| SC-006: All 5 operations accessible | 5 MCP tools implemented | Integration tests |
+| SC-007: Tool metadata in responses | ChatKit shows tool calls in UI | Visual verification |
+| SC-008: No cross-user data leakage | user_id from auth, scoped queries | Security review |

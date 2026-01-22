@@ -6,14 +6,17 @@
 
 ## Task Overview
 
+> **Architecture Update (2026-01-22)**: Implementation uses OpenAI ChatKit instead of custom SSE architecture. Tasks updated to reflect actual implementation.
+
 | Phase | Tasks | Focus |
 |-------|-------|-------|
-| 1. Foundation | 1.1-1.3 | Dependencies, models, migrations |
-| 2. Services | 2.1-2.2 | Conversation and chat services |
-| 3. Agent | 3.1-3.3 | MCP tools, agent config, prompts |
-| 4. API | 4.1-4.2 | Chat endpoint with SSE |
-| 5. Frontend | 5.1-5.4 | Chat UI components |
-| 6. Integration | 6.1-6.3 | E2E testing, observability, polish |
+| 1. Foundation | 1.1-1.4 | Dependencies, models, migrations |
+| 2. Services | 2.1-2.2 | ChatKit session service |
+| 3. Agent | 3.1-3.4 | FastMCP server, tools, auth |
+| 4. API | 4.1-4.2 | MCP endpoint, ChatKit token API |
+| 5. Frontend | 5.1-5.5 | ChatKit integration, workflow config |
+| 6. Security | 6.0a-6.0c | Rate limiting, timeout, clear history |
+| 7. Integration | 7.1-7.3 | Testing, observability, polish |
 
 ---
 
@@ -503,118 +506,106 @@ async def test_chat_creates_task():
 
 ---
 
-## Phase 5: Frontend
+## Phase 5: Frontend (ChatKit Integration)
 
-### Task 5.1: Create Chat API Client
+> **Architecture Update (2026-01-22)**: Frontend implementation uses OpenAI ChatKit widget instead of custom components. Tasks 5.1-5.3 are superseded by ChatKit integration.
+
+### Task 5.1: Add ChatKit Dependency
 
 **Status**: `completed`
 **Estimated Files**: 1
 **Dependencies**: 4.2
 
-**Objective**: Create TypeScript client for chat API with SSE support.
+**Objective**: Add OpenAI ChatKit React package.
 
 **Acceptance Criteria**:
-- [x] `sendChatMessage(message)` - sends message, returns SSE stream
-- [x] Parses SSE events into typed objects
-- [x] Handles connection errors
-- [x] Uses existing auth token from session
+- [x] `@openai/chatkit-react` added to package.json
+- [x] Package installs successfully
 
-**Files to Create**:
-- `frontend/src/lib/chat-api.ts`
-
-**Implementation**:
-```typescript
-export interface ChatEvent {
-  type: 'thinking' | 'tool_call' | 'tool_result' | 'response' | 'done';
-  content?: string;
-  tool?: string;
-  status?: string;
-  result?: string;
-  conversation_id?: string;
-}
-
-export async function* sendChatMessage(message: string): AsyncGenerator<ChatEvent> {
-  const response = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
-  });
-
-  const reader = response.body!.getReader();
-  // Parse SSE stream...
-}
-```
+**Files to Modify**:
+- `frontend/package.json`
 
 ---
 
-### Task 5.2: Create Chat Hook
+### Task 5.2: Create ChatKit Session Endpoint
 
 **Status**: `completed`
 **Estimated Files**: 1
 **Dependencies**: 5.1
 
-**Objective**: Create React hook for chat state management.
+**Objective**: Create API route to generate ChatKit session client_secret.
 
 **Acceptance Criteria**:
-- [x] `useChat()` hook returns messages, sendMessage, isLoading, error
-- [x] Manages message history state
-- [x] Handles streaming updates
-- [x] Auto-scrolls on new messages
+- [x] `POST /api/chatkit/session` creates ChatKit session via OpenAI API
+- [x] Requires authenticated user session
+- [x] Returns `client_secret` for ChatKit widget initialization
+- [x] Handles OpenAI API errors gracefully
 
 **Files to Create**:
-- `frontend/src/hooks/use-chat.ts`
+- `frontend/src/app/api/chatkit/session/route.ts`
 
 **Implementation**:
 ```typescript
-export function useChat() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export async function POST(request: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const sendMessage = async (content: string) => {
-    setIsLoading(true);
-    setMessages(prev => [...prev, { role: 'user', content }]);
+  const response = await fetch("https://api.openai.com/v1/chatkit/sessions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      "OpenAI-Beta": "chatkit_beta=v1",
+    },
+    body: JSON.stringify({
+      workflow: { id: WORKFLOW_ID },
+      user: session.user.id,
+    }),
+  });
 
-    try {
-      for await (const event of sendChatMessage(content)) {
-        // Handle streaming events...
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return { messages, sendMessage, isLoading, error };
+  const data = await response.json();
+  return NextResponse.json({ client_secret: data.client_secret });
 }
 ```
 
 ---
 
-### Task 5.3: Create Chat Components
+### Task 5.3: Create ChatKit Container Component
 
 **Status**: `completed`
-**Estimated Files**: 5
+**Estimated Files**: 1
 **Dependencies**: 5.2
 
-**Objective**: Build chat UI components.
+**Objective**: Create wrapper component for ChatKit widget.
 
 **Acceptance Criteria**:
-- [x] `ChatContainer` - main wrapper with scroll area
-- [x] `MessageList` - renders message history
-- [x] `MessageItem` - individual message bubble (user/assistant/tool)
-- [x] `ChatInput` - text input with send button
-- [x] `ToolResult` - displays tool execution results inline
-- [x] Responsive design with Tailwind CSS
-- [x] Loading states during streaming
+- [x] `ChatKitContainer` wraps `useChatKit` hook
+- [x] Fetches client_secret from session endpoint
+- [x] Displays error state if session creation fails
+- [x] Handles ChatKit errors gracefully
 
 **Files to Create**:
-- `frontend/src/components/chat/chat-container.tsx`
-- `frontend/src/components/chat/message-list.tsx`
-- `frontend/src/components/chat/message-item.tsx`
-- `frontend/src/components/chat/chat-input.tsx`
-- `frontend/src/components/chat/tool-result.tsx`
+- `frontend/src/components/chat/chatkit-container.tsx`
+
+**Implementation**:
+```typescript
+export function ChatKitContainer() {
+  const getClientSecret = async () => {
+    const response = await fetch("/api/chatkit/session", { method: "POST" });
+    const data = await response.json();
+    return data.client_secret;
+  };
+
+  const { ui } = useChatKit({
+    getClientSecret,
+    onError: (error) => console.error("ChatKit error:", error),
+  });
+
+  return <div className="h-full">{ui}</div>;
+}
+```
 
 ---
 
@@ -624,14 +615,13 @@ export function useChat() {
 **Estimated Files**: 2
 **Dependencies**: 5.3
 
-**Objective**: Create the /chat page and add navigation.
+**Objective**: Create the /chat page with ChatKit widget and add navigation.
 
 **Acceptance Criteria**:
-- [x] `/chat` page with ChatContainer
+- [x] `/chat` page renders ChatKitContainer
 - [x] Protected route (requires auth)
-- [x] Loads existing conversation history on mount
 - [x] Chat link added to navbar
-- [x] Page title set appropriately
+- [x] Responsive layout with full height
 
 **Files to Create**:
 - `frontend/src/app/(protected)/chat/page.tsx`
@@ -641,151 +631,171 @@ export function useChat() {
 
 ---
 
-### Task 5.5: Create Chat API Proxy Route
+### Task 5.5: Configure OpenAI Platform Workflow
 
 **Status**: `completed`
-**Estimated Files**: 1
-**Dependencies**: 5.1
+**Estimated Files**: 0 (external configuration)
+**Dependencies**: 3.2 (MCP tools)
 
-**Objective**: Create Next.js API route to proxy chat requests to backend.
+**Objective**: Set up ChatKit workflow on OpenAI Platform with MCP server connection.
 
 **Acceptance Criteria**:
-- [x] `POST /api/chat` proxies to backend with auth header
-- [x] Streams SSE response back to client
-- [x] Handles backend errors gracefully
+- [x] Workflow created at platform.openai.com/agents
+- [x] MCP server URL configured (https://your-backend.com/mcp)
+- [x] System prompt configured for task management
+- [x] All 5 task tools available to the workflow
+- [x] Workflow ID added to environment variables
+
+**Configuration**:
+- Workflow ID: Set in `OPENAI_CHATKIT_WORKFLOW_ID` env var
+- MCP Server: Backend `/mcp` endpoint URL
+- Model: gpt-4o-mini
+
+---
+
+## Phase 6: Security & Reliability
+
+### Task 6.0a: Implement Rate Limiting (FR-026)
+
+**Status**: `completed`
+**Estimated Files**: 2
+**Dependencies**: 4.2
+
+**Objective**: Enforce rate limiting of 20 requests per minute per authenticated user.
+
+**Acceptance Criteria**:
+- [x] Rate limit middleware tracks requests per user_id
+- [x] Returns HTTP 429 with friendly "Please slow down" message when exceeded
+- [x] Rate limit resets after 60 seconds
+- [x] Applied to chat and MCP endpoints
 
 **Files to Create**:
-- `frontend/src/app/api/chat/route.ts`
+- `backend/app/middleware/rate_limit.py`
 
-**Implementation**:
-```typescript
-export async function POST(request: Request) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session) {
-    return new Response('Unauthorized', { status: 401 });
-  }
+**Files to Modify**:
+- `backend/app/main.py`
 
-  const body = await request.json();
-  const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
-
-  const response = await fetch(`${backendUrl}/api/chat`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.token}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  return new Response(response.body, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    },
-  });
-}
+**Test Cases**:
+```python
+async def test_rate_limit_exceeded():
+    # Send 21 requests in quick succession
+    for i in range(21):
+        response = await client.post("/api/chat", json={"message": "hi"}, headers=auth_headers)
+    assert response.status_code == 429
+    assert "slow down" in response.json()["detail"].lower()
 ```
 
 ---
 
-## Phase 6: Integration & Polish
-
-### Task 6.1: Integration Testing
+### Task 6.0b: Implement AI Service Timeout (FR-027)
 
 **Status**: `completed`
+**Estimated Files**: 1
+**Dependencies**: 4.1
+
+**Objective**: Apply 30-second timeout for AI service requests with no automatic retry.
+
+**Acceptance Criteria**:
+- [x] OpenAI API calls timeout after 30 seconds
+- [x] Timeout returns user-friendly error message
+- [x] No automatic retry - user must manually resend
+- [x] User's message is preserved in conversation history
+
+**Files to Modify**:
+- `backend/app/mcp/server.py` (timeout on MCP tool calls)
+
+**Implementation**:
+```python
+# Add timeout to httpx client or fetch calls
+async with httpx.AsyncClient(timeout=30.0) as client:
+    response = await client.post(...)
+```
+
+---
+
+### Task 6.0c: Implement Clear History Function (FR-029)
+
+**Status**: `pending`
 **Estimated Files**: 2
 **Dependencies**: 5.4
 
-**Objective**: Write integration tests for chat flow.
+**Objective**: Provide "Clear history" button that deletes all messages from user's conversation.
 
 **Acceptance Criteria**:
-- [x] Test: Create task via chat → verify task in DB
-- [x] Test: List tasks via chat → verify response matches DB
-- [x] Test: Complete task via chat → verify status change
-- [x] Test: Delete task via chat → verify removal
-- [x] Test: Conversation persistence across requests
-- [x] Test: Message history limits (20 messages)
+- [ ] Clear history button visible in chat UI
+- [ ] Clicking button shows confirmation dialog
+- [ ] Confirmation deletes all messages via API
+- [ ] ChatKit widget refreshes after clear
 
-**Files to Create**:
-- `backend/tests/test_chat_integration.py`
-- `backend/tests/test_conversation_service.py`
+**Note**: ChatKit manages conversation history internally. Clear functionality may require:
+1. Backend endpoint to clear ChatKit conversation (if API supports it), OR
+2. Creating new ChatKit session (discards old conversation)
+
+**Files to Modify**:
+- `frontend/src/components/chat/chatkit-container.tsx`
+- `frontend/src/app/api/chatkit/clear/route.ts` (if needed)
 
 ---
 
-### Task 6.2: Error Handling & Logging
+## Phase 7: Integration & Polish
+
+### Task 7.1: MCP Tools Integration Testing
+
+**Status**: `completed`
+**Estimated Files**: 1
+**Dependencies**: 5.5
+
+**Objective**: Write integration tests for MCP tools.
+
+**Acceptance Criteria**:
+- [x] Test: add_task creates task in DB for authenticated user
+- [x] Test: list_tasks returns user's tasks accurately
+- [x] Test: complete_task marks task as completed
+- [x] Test: delete_task removes task from DB
+- [x] Test: update_task modifies task properties
+- [x] Test: Tools reject unauthenticated requests
+
+**Files to Create**:
+- `backend/tests/test_mcp_tools.py`
+
+---
+
+### Task 7.2: Error Handling & Logging
 
 **Status**: `completed`
 **Estimated Files**: 2
-**Dependencies**: 6.1
+**Dependencies**: 7.1
 
-**Objective**: Add structured logging and error handling.
+**Objective**: Add structured logging and error handling for MCP server.
 
 **Acceptance Criteria**:
-- [x] Request ID generated for each chat request
-- [x] Structured logs with request_id, user_id, tool calls
-- [x] Graceful handling of OpenAI API errors
-- [x] User-friendly error messages in UI
+- [x] MCP tool errors logged with user_id and tool name
+- [x] Graceful handling of database errors
+- [x] User-friendly error messages returned to ChatKit
+- [x] Authentication failures logged with request details
 
 **Files to Modify**:
-- `backend/app/services/chat_service.py`
-- `backend/app/api/routes/chat.py`
+- `backend/app/mcp/server.py`
 
 ---
 
-### Task 6.3: Implement Observability Infrastructure
+### Task 7.3: Implement Observability Infrastructure
 
 **Status**: `completed`
-**Estimated Files**: 3
-**Dependencies**: 4.2
+**Estimated Files**: 2
+**Dependencies**: 6.0a
 
 **Objective**: Add structured logging with request IDs and key metrics tracking per FR-024 and FR-025.
 
 **Acceptance Criteria**:
-- [x] Unique request_id generated for each chat request (UUID)
-- [x] Structured JSON logs include: request_id, user_id, timestamp, tool_calls, latency_ms
-- [x] Metrics captured: request latency (p50/p95), AI service response time, tool call counts
-- [x] Logs written to stdout in JSON format for container aggregation
-- [x] Request ID passed through to agent context for tool-level logging
-
-**Files to Create**:
-- `backend/app/middleware/request_id.py`
+- [x] Unique request_id generated for each MCP request
+- [x] Structured logs include: user_id, tool_name, latency_ms, success/failure
+- [x] Logs written to stdout for container aggregation
+- [x] Rate limit events logged
 
 **Files to Modify**:
-- `backend/app/services/chat_service.py`
-- `backend/app/api/routes/chat.py`
-- `backend/app/main.py`
-
-**Implementation**:
-```python
-# middleware/request_id.py
-import uuid
-from starlette.middleware.base import BaseHTTPMiddleware
-
-class RequestIDMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        request_id = str(uuid.uuid4())
-        request.state.request_id = request_id
-        response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
-        return response
-```
-
-**Test Cases**:
-```python
-async def test_request_id_in_response_header():
-    response = await client.post("/api/chat", json={"message": "hi"}, headers=auth_headers)
-    assert "X-Request-ID" in response.headers
-    assert len(response.headers["X-Request-ID"]) == 36  # UUID format
-
-async def test_structured_log_format(caplog):
-    await client.post("/api/chat", json={"message": "list tasks"}, headers=auth_headers)
-    # Verify log contains required fields
-    log_record = json.loads(caplog.records[-1].message)
-    assert "request_id" in log_record
-    assert "user_id" in log_record
-    assert "latency_ms" in log_record
-```
+- `backend/app/mcp/server.py`
+- `backend/app/middleware/rate_limit.py`
 
 ---
 
@@ -793,55 +803,58 @@ async def test_structured_log_format(caplog):
 
 ```
 1.1 (deps) ─────┐
-                ├─→ 1.2 (conv model) ─→ 1.3 (msg model) ─→ 1.4 (migrations)
-                │                                              │
-                │                                              ▼
-                │                                         2.1 (conv svc)
-                │                                              │
-                └─────────────────────────────────────────────┬┘
-                                                              │
-2.2 (schemas) ─────────────────────────────────────────┐      │
-                                                       │      │
-3.1 (context) ←────────────────────────────────────────┼──────┘
-        │                                              │
-        ▼                                              │
-3.2 (tools) ──→ 3.4 (agent) ←── 3.3 (prompts)         │
-                    │                                  │
-                    ▼                                  │
-               4.1 (chat svc) ←────────────────────────┘
-                    │
-                    ▼
-               4.2 (chat endpoint)
-                    │
-                    ▼
-               5.1 (chat api client)
-                    │
-                    ▼
-               5.2 (chat hook)
-                    │
-                    ├──→ 5.3 (components)
-                    │           │
-                    ▼           ▼
-               5.5 (proxy) ─→ 5.4 (page)
-                                │
-                                ▼
-                           6.1 (integration tests)
-                                │
-                                ▼
-                           6.2 (error handling)
-                                │
-                                ▼
-                           6.3 (observability)
+                ├─→ 1.2 (chatkit model) ─→ 1.4 (migrations)
+                │                               │
+                │                               ▼
+                │                          2.1 (chatkit svc)
+                │                               │
+                └───────────────────────────────┤
+                                                │
+3.1 (context) ←─────────────────────────────────┤
+        │                                       │
+        ▼                                       │
+3.2 (mcp tools) ──→ 3.4 (mcp server) ←─────────┘
+        │                   │
+        │                   ▼
+        │              4.2 (backend token API)
+        │                   │
+        └───────────────────┤
+                            ▼
+                       5.2 (chatkit session endpoint)
+                            │
+                            ▼
+                       5.3 (chatkit container)
+                            │
+                            ▼
+                       5.4 (chat page) ←── 5.5 (workflow config)
+                            │
+                            ▼
+                       6.0a (rate limiting)
+                            │
+                            ├─→ 6.0b (timeout)
+                            │
+                            ▼
+                       6.0c (clear history)
+                            │
+                            ▼
+                       7.1 (integration tests)
+                            │
+                            ▼
+                       7.2 (error handling)
+                            │
+                            ▼
+                       7.3 (observability)
 ```
 
 ## Estimated Effort
 
-| Phase | Tasks | Est. Time |
-|-------|-------|-----------|
-| 1. Foundation | 4 | Core setup |
-| 2. Services | 2 | Data layer |
-| 3. Agent | 4 | AI integration |
-| 4. API | 2 | Endpoint |
-| 5. Frontend | 5 | UI |
-| 6. Integration | 3 | Polish |
-| **Total** | **20** | |
+| Phase | Tasks | Status |
+|-------|-------|--------|
+| 1. Foundation | 4 | ✅ Complete |
+| 2. Services | 2 | ✅ Complete |
+| 3. Agent | 4 | ✅ Complete |
+| 4. API | 2 | ✅ Complete |
+| 5. Frontend | 5 | ✅ Complete |
+| 6. Security | 3 | ⚠️ 6.0c pending |
+| 7. Integration | 3 | ✅ Complete |
+| **Total** | **23** | 22/23 complete |

@@ -193,13 +193,28 @@ A user expects the chatbot to remember the context of their conversation within 
 ### Measurable Outcomes
 
 - **SC-001**: Users can create a task via chat in under 5 seconds from message send to confirmation.
+  - *Measurement*: Manual testing with stopwatch; verify task appears in database.
+
 - **SC-002**: Users can query their task list and receive accurate results in under 3 seconds.
-- **SC-003**: 95% of task-related queries return responses grounded in actual user data (no hallucinated tasks).
+  - *Measurement*: Manual testing with stopwatch; verify response matches database state.
+
+- **SC-003**: Task-related queries return responses grounded in actual user data (no hallucinated tasks).
+  - *Measurement*: Manual review of 20 sample interactions verifying all referenced tasks exist in user's database. MCP tools ensure responses use real data.
+
 - **SC-004**: Conversation history is preserved and accessible after browser/session restart.
+  - *Measurement*: Manual test - send messages, close browser, reopen, verify history visible.
+
 - **SC-005**: System handles 100 concurrent chat sessions without degradation.
+  - *Measurement*: Deferred to Phase 4 load testing. Architecture supports via stateless MCP server design.
+
 - **SC-006**: All 5 task operations (add, list, update, complete, delete) are accessible via natural language commands.
+  - *Measurement*: Integration tests verify each tool is callable and executes correctly.
+
 - **SC-007**: Tool execution metadata is included in 100% of responses that involve task operations.
+  - *Measurement*: ChatKit UI displays tool calls; verify visually during testing.
+
 - **SC-008**: Zero cross-user data leakage - users can only access their own tasks and conversations.
+  - *Measurement*: Integration tests verify user_id scoping; code review of MCP auth middleware.
 
 ## Assumptions
 
