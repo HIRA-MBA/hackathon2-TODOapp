@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # MCP Server API Key (for OpenAI Agents authentication)
     mcp_api_key: str = ""
 
+    # MCP Default User ID (for testing without auth - set to a valid user ID)
+    mcp_default_user_id: str = ""
+
     # OpenAI ChatKit Workflow ID
     openai_chatkit_workflow_id: str = ""
 

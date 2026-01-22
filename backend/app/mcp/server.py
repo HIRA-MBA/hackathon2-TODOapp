@@ -118,11 +118,17 @@ class AuthMiddleware:
 def get_user_id() -> str:
     """Get current authenticated user_id from context.
 
+    Falls back to MCP_DEFAULT_USER_ID if set (for testing).
+
     Raises:
         ValueError: If no authenticated user context is available.
     """
     user_id = current_user_id.get()
     if not user_id:
+        # Fallback to default user for testing
+        if settings.mcp_default_user_id:
+            logger.warning(f"MCP: Using default user_id for testing: {settings.mcp_default_user_id}")
+            return settings.mcp_default_user_id
         raise ValueError("Authentication required")
     return user_id
 
