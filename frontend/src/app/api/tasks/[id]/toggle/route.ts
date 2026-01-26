@@ -26,6 +26,15 @@ async function getAuthToken(): Promise<string | null> {
 }
 
 /**
+ * Get X-Request-ID from incoming request headers for distributed tracing.
+ * Per AC-030: Forward request ID to backend for end-to-end traceability.
+ */
+async function getRequestId(): Promise<string | null> {
+  const headersList = await headers();
+  return headersList.get("x-request-id");
+}
+
+/**
  * API route proxy for task toggle operation.
  */
 
@@ -37,6 +46,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const token = await getAuthToken();
+    const requestId = await getRequestId();
 
     if (!token) {
       return NextResponse.json(
@@ -45,12 +55,18 @@ export async function PATCH(
       );
     }
 
+    // Build headers with optional X-Request-ID for tracing (AC-030)
+    const fetchHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+    if (requestId) {
+      fetchHeaders["X-Request-ID"] = requestId;
+    }
+
     const response = await fetch(`${BACKEND_URL}/api/tasks/${id}/toggle`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: fetchHeaders,
     });
 
     const data = await response.json();

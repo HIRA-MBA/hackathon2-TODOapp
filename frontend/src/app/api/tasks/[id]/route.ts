@@ -26,6 +26,29 @@ async function getAuthToken(): Promise<string | null> {
 }
 
 /**
+ * Get X-Request-ID from incoming request headers for distributed tracing.
+ * Per AC-030: Forward request ID to backend for end-to-end traceability.
+ */
+async function getRequestId(): Promise<string | null> {
+  const headersList = await headers();
+  return headersList.get("x-request-id");
+}
+
+/**
+ * Build headers with auth and optional X-Request-ID.
+ */
+function buildHeaders(token: string, requestId: string | null): Record<string, string> {
+  const fetchHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+  if (requestId) {
+    fetchHeaders["X-Request-ID"] = requestId;
+  }
+  return fetchHeaders;
+}
+
+/**
  * API route proxy for individual task operations.
  * Per ADR-002: Uses Next.js API routes to proxy requests to FastAPI backend.
  */
@@ -38,7 +61,8 @@ export async function GET(
   try {
     const { id } = await params;
     const token = await getAuthToken();
-    
+    const requestId = await getRequestId();
+
     if (!token) {
       return NextResponse.json(
         { error: "Unauthorized", detail: "Not authenticated" },
@@ -48,10 +72,7 @@ export async function GET(
 
     const response = await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: buildHeaders(token, requestId),
     });
 
     const data = await response.json();
@@ -78,22 +99,20 @@ export async function PUT(
   try {
     const { id } = await params;
     const token = await getAuthToken();
-    
+    const requestId = await getRequestId();
+
     if (!token) {
       return NextResponse.json(
         { error: "Unauthorized", detail: "Not authenticated" },
         { status: 401 }
       );
     }
-    
+
     const body = await request.json();
 
     const response = await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: buildHeaders(token, requestId),
       body: JSON.stringify(body),
     });
 
@@ -121,7 +140,8 @@ export async function PATCH(
   try {
     const { id } = await params;
     const token = await getAuthToken();
-    
+    const requestId = await getRequestId();
+
     if (!token) {
       return NextResponse.json(
         { error: "Unauthorized", detail: "Not authenticated" },
@@ -139,10 +159,7 @@ export async function PATCH(
 
     const response = await fetch(backendUrl, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: buildHeaders(token, requestId),
     });
 
     const data = await response.json();
@@ -169,7 +186,8 @@ export async function DELETE(
   try {
     const { id } = await params;
     const token = await getAuthToken();
-    
+    const requestId = await getRequestId();
+
     if (!token) {
       return NextResponse.json(
         { error: "Unauthorized", detail: "Not authenticated" },
@@ -179,10 +197,7 @@ export async function DELETE(
 
     const response = await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
       method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: buildHeaders(token, requestId),
     });
 
     if (response.status === 204) {

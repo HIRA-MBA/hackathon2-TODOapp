@@ -22,7 +22,29 @@ export function Navbar() {
   const handleSignOut = async () => {
     setIsSigningOut(true);
     try {
-      await signOut();
+      await signOut({
+        fetchOptions: {
+          onSuccess: () => {
+            // Clear all session cookies manually
+            document.cookie.split(";").forEach((c) => {
+              const name = c.trim().split("=")[0];
+              if (name.includes("session") || name.includes("better-auth")) {
+                document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+              }
+            });
+            router.push("/signin");
+            router.refresh();
+          },
+        },
+      });
+    } catch {
+      // Clear cookies and redirect even if signOut fails
+      document.cookie.split(";").forEach((c) => {
+        const name = c.trim().split("=")[0];
+        if (name.includes("session") || name.includes("better-auth")) {
+          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+        }
+      });
       router.push("/signin");
       router.refresh();
     } finally {

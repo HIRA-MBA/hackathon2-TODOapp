@@ -36,10 +36,20 @@ async function getAuthToken(): Promise<string | null> {
   }
 }
 
+/**
+ * Get X-Request-ID from incoming request headers for distributed tracing.
+ * Per AC-030: Forward request ID to backend for end-to-end traceability.
+ */
+async function getRequestId(): Promise<string | null> {
+  const headersList = await headers();
+  return headersList.get("x-request-id");
+}
+
 // GET /api/tasks - List all tasks
 export async function GET(request: NextRequest) {
   try {
     const token = await getAuthToken();
+    const requestId = await getRequestId();
 
     if (!token) {
       return NextResponse.json(
@@ -52,12 +62,18 @@ export async function GET(request: NextRequest) {
     const sortBy = request.nextUrl.searchParams.get("sort_by") || "created_at";
     const backendUrl = `${BACKEND_URL}/api/tasks?sort_by=${sortBy}`;
 
+    // Build headers with optional X-Request-ID for tracing (AC-030)
+    const fetchHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+    if (requestId) {
+      fetchHeaders["X-Request-ID"] = requestId;
+    }
+
     const response = await fetch(backendUrl, {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: fetchHeaders,
     });
 
     const data = await response.json();
@@ -66,7 +82,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(data, { status: response.status });
     }
 
-    return NextResponse.json(data);
+    // Forward X-Request-ID in response for end-to-end tracing
+    const backendRequestId = response.headers.get("x-request-id");
+    const jsonResponse = NextResponse.json(data);
+    if (backendRequestId) {
+      jsonResponse.headers.set("x-request-id", backendRequestId);
+    }
+    return jsonResponse;
   } catch (error) {
     console.error("Failed to fetch tasks:", error);
     return NextResponse.json(
@@ -80,6 +102,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const token = await getAuthToken();
+    const requestId = await getRequestId();
 
     if (!token) {
       return NextResponse.json(
@@ -90,12 +113,18 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
+    // Build headers with optional X-Request-ID for tracing (AC-030)
+    const fetchHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+    if (requestId) {
+      fetchHeaders["X-Request-ID"] = requestId;
+    }
+
     const response = await fetch(`${BACKEND_URL}/api/tasks`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: fetchHeaders,
       body: JSON.stringify(body),
     });
 
@@ -105,7 +134,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(data, { status: response.status });
     }
 
-    return NextResponse.json(data, { status: 201 });
+    // Forward X-Request-ID in response for end-to-end tracing
+    const backendRequestId = response.headers.get("x-request-id");
+    const jsonResponse = NextResponse.json(data, { status: 201 });
+    if (backendRequestId) {
+      jsonResponse.headers.set("x-request-id", backendRequestId);
+    }
+    return jsonResponse;
   } catch (error) {
     console.error("Failed to create task:", error);
     return NextResponse.json(

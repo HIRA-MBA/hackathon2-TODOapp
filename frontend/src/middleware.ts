@@ -2,12 +2,24 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Edge middleware for authentication protection.
+ * Generate a UUID v4 for request tracing.
+ * Uses crypto.randomUUID() which is available in Edge runtime.
+ */
+function generateRequestId(): string {
+  return crypto.randomUUID();
+}
+
+/**
+ * Edge middleware for authentication protection and request tracing.
  * Per research.md: Middleware runs at edge before route execution (instant redirects).
  * Per FR-004: Redirect unauthenticated users to signin page.
+ * Per AC-030: X-Request-ID header propagation for distributed tracing.
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Get or generate X-Request-ID for distributed tracing (AC-030)
+  const requestId = request.headers.get("x-request-id") || generateRequestId();
 
   // Check for any Better Auth session cookie
   // Cookie name varies: better-auth.session_token, better-auth.session, or __Secure- prefix in prod
@@ -27,18 +39,37 @@ export function middleware(request: NextRequest) {
     if (pathname !== "/") {
       signinUrl.searchParams.set("callbackUrl", pathname);
     }
-    return NextResponse.redirect(signinUrl);
+    const response = NextResponse.redirect(signinUrl);
+    response.headers.set("x-request-id", requestId);
+    return response;
   }
 
   // If accessing auth routes with session, redirect to dashboard
   if (isAuthPath && hasSession) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    const response = NextResponse.redirect(new URL("/dashboard", request.url));
+    response.headers.set("x-request-id", requestId);
+    return response;
   }
 
-  return NextResponse.next();
+  // Continue with request, adding X-Request-ID header for tracing
+  // Set as request header so API routes can access it
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-request-id", requestId);
+
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+    headers: {
+      "x-request-id": requestId,
+    },
+  });
 }
 
 export const config = {
-  // Match all paths except static files, API routes, and auth pages
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|signin|signup).*)"],
+  // Match all paths except static files and auth pages
+  // Include API routes to add X-Request-ID for tracing (AC-030)
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico).*)",
+  ],
 };

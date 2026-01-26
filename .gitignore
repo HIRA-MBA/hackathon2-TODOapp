@@ -58,3 +58,6 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Kubernetes/Helm
+helm/*/values-local.yaml

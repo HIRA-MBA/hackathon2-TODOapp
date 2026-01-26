@@ -50,6 +50,54 @@ Operational Rules:
 - Chatbot and MCP tools must be stateless; all state stored in the database.
 - Use monorepo structure: /specs, /frontend, /backend.
 
+Phase 1: CLI Todo App
+Goal: Build the foundation using a command-line interface.
+•	Todo app runs in the terminal
+•	Add, list, update, and delete todos
+•	Uses prompts/flags for user input
+•	Local storage (file or memory-based)
+•	Focus on logic, not UI
+________________________________________
+Phase 2: Web-based Todo App
+Goal: Move from CLI to browser.
+•	Frontend UI (HTML/CSS/TypeScript or React/Next.js)
+•	Backend API for todo operations
+•	Todos created and managed via web interface
+•	Backend handles persistence (DB or file)
+•	Clear separation of frontend & backend
+👉 This phase introduces client–server architecture.
+________________________________________
+Phase 3: ChatKit Integration
+Goal: Enable conversational task management.
+•	Integrate OpenAI ChatKit into the app
+•	Users create/manage todos via chat
+•	Chat responses trigger todo actions
+•	Structured data extraction (title, description, priority, etc.)
+•	Backend processes ChatKit outputs
+👉 This phase turns  app into a conversational agent.
+________________________________________
+Phase 4: Minikube & Kubernetes Deployment
+Goal: Run the system in a local cloud-native environment.
+•	Dockerize frontend and backend
+•	Create Kubernetes manifests (Deployment, Service)
+•	Run the app on Minikube
+•	Expose services using NodePort / minikube service
+•	Validate inter-service communication
+👉 This phase introduces cloud-native fundamentals.
+________________________________________
+Phase 5: Production-Ready Architecture
+Goal: Prepare for real-world usage.
+•	Improve security and configs
+•	Environment variables & secrets
+•	Scalability considerations
+•	Optional cloud deployment
+•	Documentation & architecture clarity
+👉 This phase completes the end-to-end journey.
+________________________________________
+Simple Flow
+CLI → Web App → ChatKit → Minikube → Production
+
+
 Success Criteria:
 - All 5 hackathon phases completed
 - 100% code generated via specs

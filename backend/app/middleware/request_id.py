@@ -31,8 +31,10 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process request with ID tracking and timing."""
-        # Generate unique request ID
-        request_id = str(uuid.uuid4())
+        # Use incoming X-Request-ID if present, otherwise generate new one
+        # Per AC-030: Support distributed tracing across frontend and backend
+        incoming_request_id = request.headers.get("x-request-id")
+        request_id = incoming_request_id if incoming_request_id else str(uuid.uuid4())
 
         # Attach to request state for use in handlers
         request.state.request_id = request_id

@@ -1,55 +1,95 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# Hackathon II - Evolution of Todo Constitution
+
+## Mission
+
+Build a cloud-native, AI-powered Todo system using Spec-Driven Development, evolving from a console app to a Kubernetes-deployed distributed system.
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Spec-Driven Only (NON-NEGOTIABLE)
+No manual code writing. All code MUST be generated via Claude Code from Markdown specs. Every implementation starts with a specification in `/specs`.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Clean Architecture
+Strict separation of concerns:
+- Frontend: Next.js (UI layer)
+- Backend: FastAPI (API layer)
+- AI Agents: MCP (intelligence layer)
+- Database: PostgreSQL (persistence layer)
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Accuracy
+Implementations MUST exactly follow Acceptance Criteria defined in `/specs`. No deviations without spec amendment.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Reproducibility
+System MUST be containerized and deployable with Helm. Any developer should be able to reproduce the environment from scratch.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+## Technology Standards
 
-### [PRINCIPLE_6_NAME]
+| Layer | Technology | Version |
+|-------|------------|---------|
+| Backend Runtime | Python | 3.13+ |
+| Backend Framework | FastAPI | 0.115+ |
+| ORM | SQLModel | Latest |
+| Database | Neon Serverless PostgreSQL | - |
+| Frontend Framework | Next.js | 15+ |
+| Frontend Styling | Tailwind CSS | Latest |
+| Authentication | Better Auth | JWT-based |
+| AI SDK | OpenAI Agents SDK | Latest |
+| MCP | Official MCP SDK (FastMCP) | 2.0+ |
+| Containerization | Docker | Latest |
+| Local Orchestration | Minikube | Latest |
+| Package Manager | Helm | Latest |
+| Production Orchestration | Kubernetes | Latest |
 
+## Operational Rules
 
-[PRINCIPLE__DESCRIPTION]
+1. **Database Security**: All database queries MUST be scoped by `user_id` from JWT. No cross-user data access.
+2. **Stateless AI**: Chatbot and MCP tools MUST be stateless. All state stored in the database.
+3. **Monorepo Structure**: Use `/specs`, `/frontend`, `/backend` directory structure.
+4. **Secret Management**: No hardcoded secrets. Use environment variables and K8s secrets.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Project Phases
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### Phase I: CLI Todo App
+- Todo app runs in terminal
+- Add, list, update, delete todos
+- Local storage (file or memory-based)
+- Focus on logic, not UI
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+### Phase II: Web-based Todo App
+- Frontend UI with Next.js
+- Backend API for todo operations
+- Clear separation of frontend & backend
+- Database persistence
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### Phase III: ChatKit Integration
+- Integrate OpenAI ChatKit
+- Users manage todos via chat
+- Structured data extraction
+- Conversational agent capabilities
+
+### Phase IV: Minikube & Kubernetes Deployment
+- Dockerize frontend and backend
+- Create Kubernetes manifests
+- Run on Minikube locally
+- Validate inter-service communication
+
+### Phase V: Production-Ready Architecture
+- Security hardening
+- Environment variables & secrets
+- Scalability considerations
+- Cloud deployment (DigitalOcean Kubernetes)
+
+## Success Criteria
+
+- All 5 hackathon phases completed
+- 100% code generated via specs
+- Phase V deployed on production Kubernetes
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- Constitution supersedes all other practices
+- Amendments require documentation and approval
+- All PRs must verify compliance with these principles
+- Use semantic versioning for constitution changes
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-01-01 | **Last Amended**: 2026-01-23
