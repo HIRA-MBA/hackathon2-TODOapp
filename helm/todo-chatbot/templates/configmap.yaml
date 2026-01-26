@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "todo-chatbot.configmapName" . }}
+  labels:
+    {{- include "todo-chatbot.labels" . | nindent 4 }}
+data:
+  ENVIRONMENT: {{ .Values.config.environment | quote }}
+  NEXT_PUBLIC_APP_NAME: {{ .Values.config.appName | quote }}
+  CORS_ORIGINS: {{ .Values.config.corsOrigins | quote }}
+  BETTER_AUTH_URL: {{ .Values.config.betterAuthUrl | quote }}
+  BACKEND_URL: {{ .Values.config.backendUrl | quote }}
+  NEXT_PUBLIC_BACKEND_URL: {{ .Values.config.publicBackendUrl | default .Values.config.backendUrl | quote }}
+  NEXT_PUBLIC_BETTER_AUTH_URL: {{ .Values.config.betterAuthUrl | quote }}
+  OPENAI_CHATKIT_WORKFLOW_ID: {{ .Values.config.chatkitWorkflowId | quote }}
+  MCP_DEFAULT_USER_ID: {{ .Values.config.mcpDefaultUserId | quote }}
+  BETTER_AUTH_TRUSTED_ORIGINS: {{ .Values.config.betterAuthTrustedOrigins | quote }}
+  {{- if .Values.config.disableSecureCookies }}
+  DISABLE_SECURE_COOKIES: {{ .Values.config.disableSecureCookies | quote }}
+  {{- end }}

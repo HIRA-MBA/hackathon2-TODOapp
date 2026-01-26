@@ -50,16 +50,26 @@ export const auth = betterAuth({
   },
 
   // Trusted origins for CORS/CSRF protection
+  // Include all possible local development and deployment origins
+  // BETTER_AUTH_TRUSTED_ORIGINS env var can add additional origins (comma-separated)
   trustedOrigins: [
     "http://localhost:3000",
+    "http://localhost:30080",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:30080",
     "https://*.vercel.app",
+    // Dynamic origins from env (e.g., for minikube tunnel ports)
+    ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) || []),
   ],
 
   // Cookie configuration
   advanced: {
     cookiePrefix: "better-auth",
-    // Use secure cookies in production
-    useSecureCookies: process.env.NODE_ENV === "production",
+    // Use secure cookies only in production AND when not explicitly disabled
+    // For local K8s over HTTP, DISABLE_SECURE_COOKIES=true allows cookies to work
+    useSecureCookies:
+      process.env.NODE_ENV === "production" &&
+      process.env.DISABLE_SECURE_COOKIES !== "true",
   },
 
   // Plugins

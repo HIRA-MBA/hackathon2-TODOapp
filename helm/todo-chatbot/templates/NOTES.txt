@@ -1,0 +1,63 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named: {{ .Release.Name }}
+
+=== ACCESSING THE APPLICATION ===
+
+{{- if eq .Values.frontend.service.type "NodePort" }}
+
+Frontend is exposed via NodePort:
+
+  1. Get the NodePort URL:
+     export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "todo-chatbot.fullname" . }}-frontend)
+     export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+     echo "Frontend URL: http://$NODE_IP:$NODE_PORT"
+
+  2. Or use Minikube service command:
+     minikube service {{ include "todo-chatbot.fullname" . }}-frontend --url
+
+  3. Direct access (if using Minikube with Docker driver):
+     http://localhost:{{ .Values.frontend.service.nodePort }}
+
+{{- else if .Values.ingress.enabled }}
+
+Ingress is enabled. Access via:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+
+{{- end }}
+
+=== VERIFYING THE DEPLOYMENT ===
+
+Check pod status:
+  kubectl get pods -l "app.kubernetes.io/instance={{ .Release.Name }}"
+
+View frontend logs:
+  kubectl logs -f deployment/{{ include "todo-chatbot.fullname" . }}-frontend
+
+View backend logs:
+  kubectl logs -f deployment/{{ include "todo-chatbot.fullname" . }}-backend
+
+Test backend health:
+  kubectl exec -it deployment/{{ include "todo-chatbot.fullname" . }}-frontend -- wget -qO- http://{{ include "todo-chatbot.fullname" . }}-backend:8000/api/health
+
+=== UPGRADING ===
+
+To upgrade the deployment:
+  helm upgrade {{ .Release.Name }} ./helm/todo-chatbot -f ./helm/todo-chatbot/values-local.yaml
+
+=== UNINSTALLING ===
+
+To remove this release:
+  helm uninstall {{ .Release.Name }}
+
+=== TROUBLESHOOTING ===
+
+If pods are stuck in Pending:
+  kubectl describe pod -l "app.kubernetes.io/instance={{ .Release.Name }}"
+
+If pods keep restarting:
+  kubectl logs -f --previous deployment/{{ include "todo-chatbot.fullname" . }}-backend
+
+For more information, see docs/kubernetes-troubleshooting.md

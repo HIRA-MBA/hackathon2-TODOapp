@@ -1,0 +1,115 @@
+# Global configuration
+global:
+  environment: development
+  imageTag: local
+  imagePullPolicy: Never
+
+# Frontend configuration
+frontend:
+  replicaCount: 1
+  image:
+    repository: todo-frontend
+    tag: local
+  service:
+    type: NodePort
+    port: 80
+    targetPort: 3000
+    nodePort: 30080
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  probes:
+    liveness:
+      path: /
+      initialDelaySeconds: 10
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      path: /
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    startup:
+      path: /
+      failureThreshold: 30
+      periodSeconds: 10
+      timeoutSeconds: 10
+
+# Backend configuration
+backend:
+  replicaCount: 1
+  image:
+    repository: todo-backend
+    tag: local
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  probes:
+    liveness:
+      path: /api/health
+      initialDelaySeconds: 30
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+    readiness:
+      path: /api/health
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      timeoutSeconds: 10
+      failureThreshold: 3
+    startup:
+      path: /api/health
+      failureThreshold: 30
+      periodSeconds: 10
+      timeoutSeconds: 15
+
+# Ingress configuration (optional)
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: todo.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+        - path: /api
+          pathType: Prefix
+          service: backend
+  tls: []
+
+# ConfigMap values
+config:
+  environment: development
+  appName: "Todo App (K8s) v2"
+  corsOrigins: "http://localhost:30080,http://127.0.0.1:30080,http://localhost:3000,http://127.0.0.1:60143"
+  betterAuthUrl: "http://todo-chatbot-frontend:80"
+  backendUrl: "http://todo-chatbot-backend:8000"
+  chatkitWorkflowId: ""
+  mcpDefaultUserId: ""
+  # Additional trusted origins for Better Auth (comma-separated)
+  # Add minikube tunnel dynamic ports here
+  betterAuthTrustedOrigins: "http://127.0.0.1:64624"
+
+# Secrets (provide in values-local.yaml)
+secrets:
+  databaseUrl: ""
+  betterAuthSecret: ""
+  openaiApiKey: ""
+  mcpApiKey: ""
+  openaiDomainKey: ""
