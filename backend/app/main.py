@@ -13,6 +13,8 @@ from app.api.routes import router
 from app.mcp.server import create_mcp_app, get_mcp_http_app
 from app.middleware.request_id import RequestIDMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.correlation import CorrelationIDMiddleware
+from app.services.event_publisher import shutdown_event_publisher
 
 
 # Configure structured JSON logging per FR-024 and Task 6.3
@@ -30,6 +32,8 @@ class JSONFormatter(logging.Formatter):
         # Add extra fields from record
         if hasattr(record, "request_id"):
             log_data["request_id"] = record.request_id
+        if hasattr(record, "correlation_id"):
+            log_data["correlation_id"] = record.correlation_id
         if hasattr(record, "user_id"):
             log_data["user_id"] = record.user_id
         if hasattr(record, "method"):
@@ -89,24 +93,29 @@ mcp_app = create_mcp_app()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage application lifespan events including MCP server."""
+    """Manage application lifespan events including MCP server and event publisher."""
     # Use the singleton MCP http_app's lifespan
     mcp_http_app = get_mcp_http_app()
     async with mcp_http_app.lifespan(mcp_http_app):
         yield
-    # Shutdown
+    # Shutdown event publisher (Phase V)
+    await shutdown_event_publisher()
+    # Shutdown database
     await close_db()
 
 
 app = FastAPI(
     title="Todo Web Application API",
-    description="RESTful API for Phase II Full-Stack Todo Web Application",
-    version="1.0.0",
+    description="RESTful API with event-driven architecture (Phase V Cloud-Native)",
+    version="1.5.0",
     lifespan=lifespan,
 )
 
 # Add Request ID middleware for observability (FR-024, FR-025)
 app.add_middleware(RequestIDMiddleware)
+
+# Add Correlation ID middleware for distributed tracing (Phase V)
+app.add_middleware(CorrelationIDMiddleware)
 
 # Add rate limiting middleware for chat endpoint (FR-026)
 # 20 requests per minute per authenticated user

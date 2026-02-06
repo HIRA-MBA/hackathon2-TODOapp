@@ -93,3 +93,63 @@ Secret name
 {{- define "todo-chatbot.secretName" -}}
 {{ include "todo-chatbot.fullname" . }}-secrets
 {{- end }}
+
+{{/*
+WebSocket service labels
+*/}}
+{{- define "todo-chatbot.websocket.labels" -}}
+{{ include "todo-chatbot.labels" . }}
+app.kubernetes.io/component: websocket
+{{- end }}
+
+{{/*
+WebSocket service selector labels
+*/}}
+{{- define "todo-chatbot.websocket.selectorLabels" -}}
+{{ include "todo-chatbot.selectorLabels" . }}
+app.kubernetes.io/component: websocket
+{{- end }}
+
+{{/*
+Recurring task service labels
+*/}}
+{{- define "todo-chatbot.recurring.labels" -}}
+{{ include "todo-chatbot.labels" . }}
+app.kubernetes.io/component: recurring-task
+{{- end }}
+
+{{/*
+Recurring task service selector labels
+*/}}
+{{- define "todo-chatbot.recurring.selectorLabels" -}}
+{{ include "todo-chatbot.selectorLabels" . }}
+app.kubernetes.io/component: recurring-task
+{{- end }}
+
+{{/*
+Notification service labels
+*/}}
+{{- define "todo-chatbot.notification.labels" -}}
+{{ include "todo-chatbot.labels" . }}
+app.kubernetes.io/component: notification
+{{- end }}
+
+{{/*
+Notification service selector labels
+*/}}
+{{- define "todo-chatbot.notification.selectorLabels" -}}
+{{ include "todo-chatbot.selectorLabels" . }}
+app.kubernetes.io/component: notification
+{{- end }}
+
+{{/*
+Dapr annotations for sidecar injection
+*/}}
+{{- define "todo-chatbot.dapr.annotations" -}}
+dapr.io/enabled: "true"
+dapr.io/app-port: "{{ .port }}"
+dapr.io/app-id: "{{ .appId }}"
+dapr.io/app-protocol: "http"
+dapr.io/enable-metrics: "true"
+dapr.io/metrics-port: "9090"
+{{- end }}

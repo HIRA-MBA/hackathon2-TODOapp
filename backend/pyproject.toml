@@ -21,6 +21,10 @@ dependencies = [
     "dateparser>=1.2.0",  # Natural language date parsing per FR-028
     # Phase 4: ChatKit + MCP
     "fastmcp>=2.0.0",
+    # Phase 5: Dapr event-driven architecture
+    "dapr>=1.14.0",
+    "dapr-ext-fastapi>=1.14.0",
+    "python-dateutil>=2.9.0",  # RFC 5545 recurrence patterns
 ]
 
 [project.optional-dependencies]

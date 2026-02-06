@@ -1,0 +1,22 @@
+# Dapr State Store Component - Local Development
+# Uses Redis for state management and caching
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.redis
+  version: v1
+  metadata:
+    # Redis connection - use container name for local Docker Compose
+    - name: redisHost
+      value: "redis:6379"
+    # No password for local development
+    - name: redisPassword
+      value: ""
+    # Key prefix for namespacing
+    - name: keyPrefix
+      value: "todo"
+    # Enable transactions for consistency
+    - name: enableTLS
+      value: "false"  # Local only

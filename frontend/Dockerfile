@@ -2,8 +2,8 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Enable pnpm
-RUN corepack enable pnpm
+# Install pnpm directly (more reliable than corepack in Docker)
+RUN npm install -g pnpm@9
 
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
@@ -15,8 +15,8 @@ RUN pnpm install --frozen-lockfile
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Enable pnpm
-RUN corepack enable pnpm
+# Install pnpm directly
+RUN npm install -g pnpm@9
 
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules

@@ -1,0 +1,326 @@
+# WebSocket Protocol Specification
+# Branch: 005-cloud-native-doks
+# Version: 1.0.0
+
+asyncapi: "2.6.0"
+info:
+  title: Todo Chatbot WebSocket Protocol
+  version: "1.0.0"
+  description: |
+    WebSocket message protocol for real-time task synchronization.
+    Supports bi-directional communication between frontend and WebSocket service.
+
+servers:
+  production:
+    url: wss://ws.todo.example.com
+    protocol: wss
+    description: Production WebSocket endpoint
+
+channels:
+  /:
+    bindings:
+      ws:
+        query:
+          type: object
+          properties:
+            token:
+              type: string
+              description: JWT access token for authentication
+          required:
+            - token
+    publish:
+      operationId: sendClientMessage
+      description: Messages from client to server
+      message:
+        oneOf:
+          - $ref: "#/components/messages/Subscribe"
+          - $ref: "#/components/messages/Unsubscribe"
+          - $ref: "#/components/messages/Ping"
+    subscribe:
+      operationId: receiveServerMessage
+      description: Messages from server to client
+      message:
+        oneOf:
+          - $ref: "#/components/messages/TaskUpdate"
+          - $ref: "#/components/messages/ConnectionAck"
+          - $ref: "#/components/messages/SubscriptionAck"
+          - $ref: "#/components/messages/Error"
+          - $ref: "#/components/messages/Pong"
+
+components:
+  messages:
+    # Client → Server Messages
+    Subscribe:
+      name: Subscribe
+      title: Subscribe to Task Updates
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/SubscribeMessage"
+
+    Unsubscribe:
+      name: Unsubscribe
+      title: Unsubscribe from Task Updates
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/UnsubscribeMessage"
+
+    Ping:
+      name: Ping
+      title: Keep-alive Ping
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/PingMessage"
+
+    # Server → Client Messages
+    TaskUpdate:
+      name: TaskUpdate
+      title: Real-time Task Update
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/TaskUpdateMessage"
+
+    ConnectionAck:
+      name: ConnectionAck
+      title: Connection Acknowledgment
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/ConnectionAckMessage"
+
+    SubscriptionAck:
+      name: SubscriptionAck
+      title: Subscription Acknowledgment
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/SubscriptionAckMessage"
+
+    Error:
+      name: Error
+      title: Error Message
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/ErrorMessage"
+
+    Pong:
+      name: Pong
+      title: Keep-alive Pong
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/PongMessage"
+
+  schemas:
+    # Base message envelope
+    BaseMessage:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          description: Message type discriminator
+        id:
+          type: string
+          format: uuid
+          description: Optional message ID for correlation
+
+    # Client Messages
+    SubscribeMessage:
+      allOf:
+        - $ref: "#/components/schemas/BaseMessage"
+        - type: object
+          properties:
+            type:
+              const: "subscribe"
+            payload:
+              type: object
+              properties:
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [own_tasks, shared_tasks, all]
+                  default: [own_tasks]
+                  description: What updates to receive
+
+    UnsubscribeMessage:
+      allOf:
+        - $ref: "#/components/schemas/BaseMessage"
+        - type: object
+          properties:
+            type:
+              const: "unsubscribe"
+
+    PingMessage:
+      allOf:
+        - $ref: "#/components/schemas/BaseMessage"
+        - type: object
+          properties:
+            type:
+              const: "ping"
+            timestamp:
+              type: integer
+              description: Client timestamp for latency measurement
+
+    # Server Messages
+    ConnectionAckMessage:
+      allOf:
+        - $ref: "#/components/schemas/BaseMessage"
+        - type: object
+          properties:
+            type:
+              const: "connection_ack"
+            payload:
+              type: object
+              properties:
+                connectionId:
+                  type: string
+                  format: uuid
+                  description: Server-assigned connection identifier
+                userId:
+                  type: string
+                  format: uuid
+                  description: Authenticated user ID
+                serverTime:
+                  type: string
+                  format: date-time
+                reconnectToken:
+                  type: string
+                  description: Token for state recovery on reconnect
+
+    SubscriptionAckMessage:
+      allOf:
+        - $ref: "#/components/schemas/BaseMessage"
+        - type: object
+          properties:
+            type:
+              const: "subscription_ack"
+            payload:
+              type: object
+              properties:
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                activeSubscriptions:
+                  type: integer
+
+    TaskUpdateMessage:
+      allOf:
+        - $ref: "#/components/schemas/BaseMessage"
+        - type: object
+          properties:
+            type:
+              const: "task_update"
+            payload:
+              type: object
+              required:
+                - action
+                - taskId
+                - timestamp
+              properties:
+                action:
+                  type: string
+                  enum: [created, updated, deleted]
+                taskId:
+                  type: string
+                  format: uuid
+                timestamp:
+                  type: string
+                  format: date-time
+                task:
+                  $ref: "#/components/schemas/TaskSnapshot"
+                  description: Full task data (null for delete action)
+                changedFields:
+                  type: array
+                  items:
+                    type: string
+                  description: For updates, which fields changed
+
+    TaskSnapshot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, completed, deleted]
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+        reminderOffset:
+          type: integer
+        hasRecurrence:
+          type: boolean
+        parentTaskId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ErrorMessage:
+      allOf:
+        - $ref: "#/components/schemas/BaseMessage"
+        - type: object
+          properties:
+            type:
+              const: "error"
+            payload:
+              type: object
+              required:
+                - code
+                - message
+              properties:
+                code:
+                  type: string
+                  enum:
+                    - AUTH_FAILED
+                    - TOKEN_EXPIRED
+                    - INVALID_MESSAGE
+                    - SUBSCRIPTION_FAILED
+                    - INTERNAL_ERROR
+                message:
+                  type: string
+                  description: Human-readable error message
+                retryable:
+                  type: boolean
+                  default: false
+                retryAfter:
+                  type: integer
+                  description: Seconds to wait before retry (if retryable)
+
+    PongMessage:
+      allOf:
+        - $ref: "#/components/schemas/BaseMessage"
+        - type: object
+          properties:
+            type:
+              const: "pong"
+            payload:
+              type: object
+              properties:
+                clientTimestamp:
+                  type: integer
+                  description: Echo of client's ping timestamp
+                serverTimestamp:
+                  type: integer
+                  description: Server's current timestamp
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token passed as query parameter on WebSocket connection.
+        Token must contain user_id claim for authorization filtering.

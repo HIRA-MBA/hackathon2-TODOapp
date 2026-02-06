@@ -1,0 +1,19 @@
+{{- if .Values.recurringTask.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "todo-chatbot.fullname" . }}-recurring-task
+  labels:
+    {{- include "todo-chatbot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: recurring-task
+spec:
+  type: {{ .Values.recurringTask.service.type }}
+  ports:
+    - port: {{ .Values.recurringTask.service.port }}
+      targetPort: {{ .Values.recurringTask.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "todo-chatbot.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: recurring-task
+{{- end }}

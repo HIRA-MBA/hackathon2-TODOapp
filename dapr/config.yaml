@@ -1,0 +1,22 @@
+# Dapr Configuration - Local Development
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: todo-chatbot-config
+spec:
+  # Tracing configuration for observability
+  tracing:
+    samplingRate: "1"  # 100% sampling for development
+    zipkin:
+      endpointAddress: "http://zipkin:9411/api/v2/spans"
+  # Metrics configuration
+  metric:
+    enabled: true
+  # API access control - allow all for local dev
+  accessControl:
+    defaultAction: allow
+  # App-level retry policy
+  appHttpPipeline:
+    handlers:
+      - name: uppercase
+        type: middleware.http.uppercase

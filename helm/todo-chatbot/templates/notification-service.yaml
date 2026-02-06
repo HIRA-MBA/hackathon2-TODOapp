@@ -1,0 +1,19 @@
+{{- if .Values.notification.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "todo-chatbot.fullname" . }}-notification
+  labels:
+    {{- include "todo-chatbot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: notification
+spec:
+  type: {{ .Values.notification.service.type }}
+  ports:
+    - port: {{ .Values.notification.service.port }}
+      targetPort: {{ .Values.notification.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "todo-chatbot.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: notification
+{{- end }}

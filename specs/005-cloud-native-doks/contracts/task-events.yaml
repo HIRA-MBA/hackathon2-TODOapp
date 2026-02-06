@@ -1,0 +1,356 @@
+# Task Events CloudEvents Schema
+# Branch: 005-cloud-native-doks
+# Version: 1.0.0
+
+asyncapi: "2.6.0"
+info:
+  title: Todo Chatbot Task Events
+  version: "1.0.0"
+  description: |
+    CloudEvents schema for task domain events published via Dapr pub/sub.
+    All events follow CloudEvents v1.0 specification.
+
+channels:
+  task-events:
+    description: Task lifecycle events (create, update, delete, complete)
+    subscribe:
+      operationId: receiveTaskEvent
+      message:
+        oneOf:
+          - $ref: "#/components/messages/TaskCreated"
+          - $ref: "#/components/messages/TaskUpdated"
+          - $ref: "#/components/messages/TaskDeleted"
+          - $ref: "#/components/messages/TaskCompleted"
+
+  task-updates:
+    description: Real-time sync events for connected WebSocket clients
+    subscribe:
+      operationId: receiveTaskUpdate
+      message:
+        $ref: "#/components/messages/TaskSyncUpdate"
+
+  reminders:
+    description: Scheduled notification triggers
+    subscribe:
+      operationId: receiveReminder
+      message:
+        $ref: "#/components/messages/ReminderTrigger"
+
+components:
+  messages:
+    TaskCreated:
+      name: TaskCreated
+      title: Task Created Event
+      contentType: application/cloudevents+json
+      payload:
+        $ref: "#/components/schemas/TaskCreatedEvent"
+
+    TaskUpdated:
+      name: TaskUpdated
+      title: Task Updated Event
+      contentType: application/cloudevents+json
+      payload:
+        $ref: "#/components/schemas/TaskUpdatedEvent"
+
+    TaskDeleted:
+      name: TaskDeleted
+      title: Task Deleted Event
+      contentType: application/cloudevents+json
+      payload:
+        $ref: "#/components/schemas/TaskDeletedEvent"
+
+    TaskCompleted:
+      name: TaskCompleted
+      title: Task Completed Event
+      contentType: application/cloudevents+json
+      payload:
+        $ref: "#/components/schemas/TaskCompletedEvent"
+
+    TaskSyncUpdate:
+      name: TaskSyncUpdate
+      title: Task Sync Update for WebSocket
+      contentType: application/cloudevents+json
+      payload:
+        $ref: "#/components/schemas/TaskSyncEvent"
+
+    ReminderTrigger:
+      name: ReminderTrigger
+      title: Reminder Trigger Event
+      contentType: application/cloudevents+json
+      payload:
+        $ref: "#/components/schemas/ReminderEvent"
+
+  schemas:
+    # CloudEvents envelope (Dapr auto-populates most fields)
+    CloudEventEnvelope:
+      type: object
+      required:
+        - specversion
+        - id
+        - source
+        - type
+      properties:
+        specversion:
+          type: string
+          const: "1.0"
+        id:
+          type: string
+          format: uuid
+          description: Unique event identifier (idempotency key)
+        source:
+          type: string
+          format: uri
+          example: "https://api.todo.example.com/tasks"
+        type:
+          type: string
+          description: Event type for routing
+        datacontenttype:
+          type: string
+          default: "application/json"
+        subject:
+          type: string
+          description: Resource identifier (e.g., "tasks/{task_id}")
+        time:
+          type: string
+          format: date-time
+        traceparent:
+          type: string
+          description: W3C Trace Context header (Dapr correlation)
+
+    # Task data snapshot
+    TaskData:
+      type: object
+      required:
+        - taskId
+        - title
+        - status
+        - userId
+      properties:
+        taskId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, completed, deleted]
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+        reminderOffset:
+          type: integer
+          default: 30
+          description: Minutes before due date for reminder
+        userId:
+          type: string
+          format: uuid
+        recurrence:
+          $ref: "#/components/schemas/RecurrenceData"
+          nullable: true
+        parentTaskId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Original task ID if this is a recurring instance
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    RecurrenceData:
+      type: object
+      required:
+        - frequency
+        - interval
+      properties:
+        frequency:
+          type: string
+          enum: [daily, weekly, monthly, custom]
+        interval:
+          type: integer
+          minimum: 1
+        byWeekday:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          description: Days of week (0=Monday, 6=Sunday)
+        byMonthday:
+          type: integer
+          minimum: 1
+          maximum: 31
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+        maxOccurrences:
+          type: integer
+          minimum: 1
+          nullable: true
+        rruleString:
+          type: string
+          description: RFC 5545 RRULE for complex patterns
+
+    # Event payloads
+    TaskCreatedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            type:
+              const: "com.todo.task.created"
+            data:
+              $ref: "#/components/schemas/TaskData"
+
+    TaskUpdatedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            type:
+              const: "com.todo.task.updated"
+            data:
+              type: object
+              required:
+                - taskId
+                - userId
+                - changedFields
+              properties:
+                taskId:
+                  type: string
+                  format: uuid
+                userId:
+                  type: string
+                  format: uuid
+                changedFields:
+                  type: array
+                  items:
+                    type: string
+                  description: List of modified field names
+                snapshot:
+                  $ref: "#/components/schemas/TaskData"
+
+    TaskDeletedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            type:
+              const: "com.todo.task.deleted"
+            data:
+              type: object
+              required:
+                - taskId
+                - userId
+              properties:
+                taskId:
+                  type: string
+                  format: uuid
+                userId:
+                  type: string
+                  format: uuid
+
+    TaskCompletedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            type:
+              const: "com.todo.task.completed"
+            data:
+              type: object
+              required:
+                - taskId
+                - userId
+                - completedAt
+              properties:
+                taskId:
+                  type: string
+                  format: uuid
+                userId:
+                  type: string
+                  format: uuid
+                completedAt:
+                  type: string
+                  format: date-time
+                hasRecurrence:
+                  type: boolean
+                  description: If true, recurring-task service should create next instance
+                recurrence:
+                  $ref: "#/components/schemas/RecurrenceData"
+                  nullable: true
+
+    TaskSyncEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - "com.todo.sync.created"
+                - "com.todo.sync.updated"
+                - "com.todo.sync.deleted"
+            data:
+              type: object
+              required:
+                - action
+                - taskId
+                - userId
+              properties:
+                action:
+                  type: string
+                  enum: [created, updated, deleted]
+                taskId:
+                  type: string
+                  format: uuid
+                userId:
+                  type: string
+                  format: uuid
+                task:
+                  $ref: "#/components/schemas/TaskData"
+                  nullable: true
+                  description: Full task data (null for delete)
+
+    ReminderEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            type:
+              const: "com.todo.reminder.trigger"
+            data:
+              type: object
+              required:
+                - reminderId
+                - taskId
+                - userId
+                - channels
+              properties:
+                reminderId:
+                  type: string
+                  format: uuid
+                taskId:
+                  type: string
+                  format: uuid
+                userId:
+                  type: string
+                  format: uuid
+                taskTitle:
+                  type: string
+                dueDate:
+                  type: string
+                  format: date-time
+                channels:
+                  type: array
+                  items:
+                    type: string
+                    enum: [email, push]

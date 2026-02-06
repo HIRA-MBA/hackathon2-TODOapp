@@ -1,0 +1,27 @@
+# Dapr Pub/Sub Component - Local Development
+# Uses Redpanda (Kafka-compatible) for event streaming
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+spec:
+  type: pubsub.kafka
+  version: v1
+  metadata:
+    # Broker configuration - use container name for local Docker Compose
+    - name: brokers
+      value: "redpanda:9092"
+    # Consumer group - dynamically set per service
+    - name: consumerGroup
+      value: "${APP_ID:-default}"
+    # Authentication - none for local development
+    - name: authType
+      value: "none"
+    # Message settings
+    - name: maxMessageBytes
+      value: "1048576"  # 1MB
+    - name: disableTls
+      value: "true"  # Local only - production uses TLS
+    # CloudEvents settings
+    - name: rawPayload
+      value: "false"  # Use CloudEvents envelope

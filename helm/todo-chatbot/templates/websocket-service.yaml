@@ -1,0 +1,20 @@
+{{- if .Values.websocket.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "todo-chatbot.fullname" . }}-websocket
+  labels:
+    {{- include "todo-chatbot.websocket.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.websocket.service.type }}
+  ports:
+    - port: {{ .Values.websocket.service.port }}
+      targetPort: {{ .Values.websocket.service.targetPort }}
+      protocol: TCP
+      name: http
+      {{- if and (eq .Values.websocket.service.type "NodePort") .Values.websocket.service.nodePort }}
+      nodePort: {{ .Values.websocket.service.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "todo-chatbot.websocket.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -1,0 +1,67 @@
+{{- if .Values.dapr.enabled }}
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: pubsub.kafka
+  version: v1
+  metadata:
+    # Kafka/Redpanda broker addresses
+    - name: brokers
+      {{- if .Values.dapr.pubsub.secretRef }}
+      secretKeyRef:
+        name: {{ .Values.dapr.pubsub.secretRef }}
+        key: brokers
+      {{- else }}
+      value: {{ .Values.dapr.pubsub.brokers | quote }}
+      {{- end }}
+
+    # Consumer group for this application
+    - name: consumerGroup
+      value: {{ .Values.dapr.pubsub.consumerGroup | default "todo-chatbot" | quote }}
+
+    # Authentication type (none, password, mtls, oidc, awsiam)
+    - name: authType
+      value: {{ .Values.dapr.pubsub.authType | default "none" | quote }}
+
+    {{- if eq .Values.dapr.pubsub.authType "password" }}
+    # SASL/SCRAM authentication for Redpanda Cloud
+    - name: saslUsername
+      {{- if .Values.dapr.pubsub.secretRef }}
+      secretKeyRef:
+        name: {{ .Values.dapr.pubsub.secretRef }}
+        key: saslUsername
+      {{- else }}
+      value: {{ .Values.dapr.pubsub.saslUsername | quote }}
+      {{- end }}
+    - name: saslPassword
+      {{- if .Values.dapr.pubsub.secretRef }}
+      secretKeyRef:
+        name: {{ .Values.dapr.pubsub.secretRef }}
+        key: saslPassword
+      {{- else }}
+      value: {{ .Values.dapr.pubsub.saslPassword | quote }}
+      {{- end }}
+    - name: saslMechanism
+      value: {{ .Values.dapr.pubsub.saslMechanism | default "SCRAM-SHA-256" | quote }}
+    {{- end }}
+
+    {{- if .Values.dapr.pubsub.tlsEnabled }}
+    # TLS configuration
+    - name: disableTls
+      value: "false"
+    - name: tlsSkipVerify
+      value: {{ .Values.dapr.pubsub.tlsSkipVerify | default "false" | quote }}
+    {{- else }}
+    - name: disableTls
+      value: "true"
+    {{- end }}
+
+    # Message delivery settings
+    - name: maxMessageBytes
+      value: {{ .Values.dapr.pubsub.maxMessageBytes | default "1048576" | quote }}
+    - name: initialOffset
+      value: {{ .Values.dapr.pubsub.initialOffset | default "newest" | quote }}
+{{- end }}

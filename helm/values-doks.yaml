@@ -1,0 +1,226 @@
+# DigitalOcean Kubernetes (DOKS) Production Values
+# Usage: helm upgrade --install todo-chatbot ./helm/todo-chatbot -f helm/values-doks.yaml
+
+# Global configuration
+global:
+  environment: production
+  imageTag: latest  # Override with specific tag in CI/CD
+  imagePullPolicy: Always
+  # DigitalOcean Container Registry
+  registry: registry.digitalocean.com/your-registry
+  imagePullSecrets:
+    - name: docr-secret
+
+# Frontend configuration
+frontend:
+  replicaCount: 2
+  image:
+    repository: todo-frontend
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  probes:
+    liveness:
+      path: /
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+    readiness:
+      path: /
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    startup:
+      path: /
+      failureThreshold: 30
+      periodSeconds: 10
+      timeoutSeconds: 10
+
+# Backend configuration
+backend:
+  replicaCount: 2
+  image:
+    repository: todo-backend
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  probes:
+    liveness:
+      path: /api/health
+      initialDelaySeconds: 30
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+    readiness:
+      path: /api/health/ready
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      timeoutSeconds: 10
+      failureThreshold: 3
+    startup:
+      path: /api/health
+      failureThreshold: 30
+      periodSeconds: 10
+      timeoutSeconds: 15
+
+# WebSocket service configuration
+websocket:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: todo-websocket
+  service:
+    type: ClusterIP
+    port: 8001
+    targetPort: 8001
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+# Recurring task service configuration
+recurringTask:
+  enabled: true
+  replicaCount: 1  # Single instance sufficient for event processing
+  image:
+    repository: todo-recurring-task
+  service:
+    type: ClusterIP
+    port: 8002
+    targetPort: 8002
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+# Notification service configuration
+notification:
+  enabled: true
+  replicaCount: 1  # Single instance sufficient for event processing
+  image:
+    repository: todo-notification
+  service:
+    type: ClusterIP
+    port: 8003
+    targetPort: 8003
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "250m"
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+# Ingress configuration for DOKS
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: "todo-chatbot-websocket"
+  hosts:
+    - host: todo.your-domain.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+        - path: /api
+          pathType: Prefix
+          service: backend
+        - path: /ws
+          pathType: Prefix
+          service: websocket
+  tls:
+    - secretName: todo-tls
+      hosts:
+        - todo.your-domain.com
+
+# ConfigMap values for DOKS
+config:
+  environment: production
+  appName: "Todo App"
+  corsOrigins: "https://todo.your-domain.com"
+  betterAuthUrl: "https://todo.your-domain.com"
+  backendUrl: "http://todo-chatbot-backend:8000"
+  chatkitWorkflowId: ""  # Set via secret or CI/CD
+  mcpDefaultUserId: ""
+  betterAuthTrustedOrigins: "https://todo.your-domain.com"
+
+# Secrets (provide via external secrets or sealed secrets)
+secrets:
+  # These should be provided via:
+  # 1. Sealed Secrets
+  # 2. External Secrets Operator
+  # 3. kubectl create secret before deployment
+  databaseUrl: ""       # Neon PostgreSQL connection string
+  betterAuthSecret: ""  # 32+ character secret
+  openaiApiKey: ""      # OpenAI API key
+  mcpApiKey: ""         # MCP API key
+  openaiDomainKey: ""   # ChatKit domain key
+
+# Dapr configuration for DOKS
+dapr:
+  enabled: true
+  pubsub:
+    # Redpanda Cloud configuration (SASL_SSL)
+    brokers: ""  # e.g., "seed-xxxxx.redpanda.com:9092"
+    consumerGroup: "todo-chatbot-prod"
+    authType: "password"
+    saslMechanism: "SCRAM-SHA-256"
+    tlsEnabled: true
+    tlsSkipVerify: false
+    maxMessageBytes: "1048576"
+    initialOffset: "newest"
+    secretRef: "redpanda-credentials"  # Kubernetes secret name
+  statestore:
+    # DigitalOcean Managed Redis or external Redis
+    redisHost: ""  # e.g., "redis-xxxxx-do-user.db.ondigitalocean.com:25061"
+    enableTLS: true
+    actorStateStore: "true"
+    keyPrefix: "todo-prod"
+    secretRef: "redis-credentials"  # Kubernetes secret name
+  secretstore:
+    enabled: true

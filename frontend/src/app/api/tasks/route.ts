@@ -26,12 +26,13 @@ async function getAuthToken(): Promise<string | null> {
     const session = await auth.api.getSession({ headers: headersList });
 
     if (!session?.user?.id) {
+      console.debug("No session found");
       return null;
     }
 
     return createToken(session.user.id);
   } catch (error) {
-    console.error("Auth error:", error);
+    console.error("Auth error getting session:", error);
     return null;
   }
 }
@@ -75,6 +76,17 @@ export async function GET(request: NextRequest) {
       method: "GET",
       headers: fetchHeaders,
     });
+
+    // Handle non-JSON responses gracefully
+    const contentType = response.headers.get("content-type");
+    if (!contentType?.includes("application/json")) {
+      const text = await response.text();
+      console.error("Backend returned non-JSON response:", text.slice(0, 200));
+      return NextResponse.json(
+        { error: "Backend Error", detail: "Backend returned invalid response" },
+        { status: 502 }
+      );
+    }
 
     const data = await response.json();
 

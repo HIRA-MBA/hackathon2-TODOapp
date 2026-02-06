@@ -1,0 +1,77 @@
+{{- if .Values.recurringTask.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "todo-chatbot.fullname" . }}-recurring-task
+  labels:
+    {{- include "todo-chatbot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: recurring-task
+spec:
+  replicas: {{ .Values.recurringTask.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "todo-chatbot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: recurring-task
+  {{- if .Values.recurringTask.strategy }}
+  strategy:
+    {{- toYaml .Values.recurringTask.strategy | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "todo-chatbot.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: recurring-task
+      {{- if .Values.dapr.enabled }}
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "recurring-task-service"
+        dapr.io/app-port: "{{ .Values.recurringTask.service.targetPort }}"
+        dapr.io/app-protocol: "http"
+        dapr.io/enable-metrics: "true"
+      {{- end }}
+    spec:
+      containers:
+        - name: recurring-task
+          image: "{{ .Values.global.registry | default "" }}{{ if .Values.global.registry }}/{{ end }}{{ .Values.recurringTask.image.repository }}:{{ .Values.recurringTask.image.tag | default .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.recurringTask.service.targetPort }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "{{ .Values.recurringTask.service.targetPort }}"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "todo-chatbot.secretName" . }}
+                  key: DATABASE_URL
+            - name: BACKEND_URL
+              value: "http://{{ include "todo-chatbot.fullname" . }}-backend:{{ .Values.backend.service.port }}"
+            {{- if .Values.dapr.enabled }}
+            - name: DAPR_HTTP_PORT
+              value: "3500"
+            {{- end }}
+          resources:
+            {{- toYaml .Values.recurringTask.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.recurringTask.probes.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.recurringTask.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.recurringTask.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.recurringTask.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.recurringTask.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.recurringTask.probes.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.recurringTask.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.recurringTask.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.recurringTask.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.recurringTask.probes.readiness.failureThreshold }}
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
+{{- end }}

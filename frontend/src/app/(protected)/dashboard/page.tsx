@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useTasks, SortBy } from "@/hooks/use-tasks";
 import { TaskList } from "@/components/tasks/task-list";
 import { TaskForm } from "@/components/tasks/task-form";
 import { TaskEditDialog } from "@/components/tasks/task-edit-dialog";
 import { Navbar } from "@/components/navbar";
 import { Button } from "@/components/ui/button";
+import { ConnectionStatusBadge } from "@/components/tasks/connection-status";
+import { useSession, authClient } from "@/lib/auth.client";
 import type { Task, TaskCreate } from "@/lib/types";
 
 type FilterType = "all" | "active" | "completed";
@@ -14,10 +16,43 @@ type FilterType = "all" | "active" | "completed";
 /**
  * Dashboard page - main task management view.
  * Per FR-003: Protected dashboard page at /dashboard path.
+ * Phase V: Includes real-time task synchronization via WebSocket.
  */
 export default function DashboardPage() {
   const [sortBy, setSortBy] = useState<SortBy>("created_at");
-  const { tasks, isLoading, error, createTask, updateTask, toggleTask, deleteTask } = useTasks({ sortBy });
+  const [wsToken, setWsToken] = useState<string | null>(null);
+  const { data: session } = useSession();
+
+  // Get JWT token for WebSocket authentication
+  useEffect(() => {
+    async function getToken() {
+      try {
+        // @ts-expect-error - jwt method from plugin
+        const result = await authClient.jwt?.getToken?.();
+        if (result?.token) {
+          setWsToken(result.token);
+        }
+      } catch {
+        // Token not available - real-time sync will be disabled
+        console.debug("WebSocket token not available");
+      }
+    }
+    if (session?.user) {
+      getToken();
+    }
+  }, [session]);
+
+  const {
+    tasks,
+    isLoading,
+    error,
+    createTask,
+    updateTask,
+    toggleTask,
+    deleteTask,
+    syncStatus,
+    isSyncing,
+  } = useTasks({ sortBy, token: wsToken });
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -75,9 +110,13 @@ export default function DashboardPage() {
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">My Tasks</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-bold text-gray-900">My Tasks</h1>
+                <ConnectionStatusBadge status={syncStatus} />
+              </div>
               <p className="mt-1 text-gray-500">
                 Stay organized and get things done
+                {isSyncing && " • Real-time sync active"}
               </p>
             </div>
 
