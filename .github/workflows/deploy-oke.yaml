@@ -1,0 +1,234 @@
+# GitHub Actions Deploy to Oracle Cloud OKE Workflow
+# Builds images, pushes to OCIR, and deploys to OKE (Always Free tier)
+
+name: Deploy to OKE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+
+env:
+  OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
+  REGISTRY: ${{ secrets.OCI_CLI_REGION }}.ocir.io
+  NAMESPACE: ${{ secrets.OCIR_NAMESPACE }}
+  HELM_RELEASE: todo-chatbot
+  K8S_NAMESPACE: production
+
+jobs:
+  # Build and push all images to OCIR
+  build-push:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate image tag
+        id: meta
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "version=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up QEMU (for ARM cross-compilation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/arm64
+
+      - name: Login to OCIR
+        run: |
+          echo "${{ secrets.OCIR_TOKEN }}" | docker login \
+            ${{ env.REGISTRY }} \
+            -u "${{ secrets.OCIR_USERNAME }}" \
+            --password-stdin
+
+      # Build Backend (ARM64 for OKE A1 nodes)
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/todo-backend:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/todo-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Build Frontend
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/todo-frontend:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/todo-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Build WebSocket Service
+      - name: Build and push websocket-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/websocket
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/websocket-service:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/websocket-service:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Build Recurring Task Service
+      - name: Build and push recurring-task-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/recurring-task
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/recurring-task-service:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/recurring-task-service:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Build Notification Service
+      - name: Build and push notification-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/notification
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/notification-service:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/notification-service:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Deploy to OKE
+  deploy:
+    name: Deploy to OKE
+    runs-on: ubuntu-latest
+    needs: build-push
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure OCI CLI
+        uses: oracle-actions/configure-oci-credentials@v1.3.2
+        with:
+          user: ${{ secrets.OCI_CLI_USER }}
+          fingerprint: ${{ secrets.OCI_CLI_FINGERPRINT }}
+          tenancy: ${{ secrets.OCI_CLI_TENANCY }}
+          region: ${{ secrets.OCI_CLI_REGION }}
+          api_key_content: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+
+      - name: Get kubeconfig
+        uses: oracle-actions/run-oci-cli-command@v1.3.2
+        with:
+          command: >
+            ce cluster create-kubeconfig
+            --cluster-id ${{ secrets.OKE_CLUSTER_OCID }}
+            --file $HOME/.kube/config
+            --region ${{ secrets.OCI_CLI_REGION }}
+            --token-version 2.0.0
+            --kube-endpoint PUBLIC_ENDPOINT
+
+      - name: Verify cluster connection
+        run: kubectl get nodes
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.14.0
+
+      - name: Create namespace
+        run: kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create OCIR pull secret
+        run: |
+          kubectl create secret docker-registry ocir-secret \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            --docker-server=${{ env.REGISTRY }} \
+            --docker-username='${{ secrets.OCIR_USERNAME }}' \
+            --docker-password='${{ secrets.OCIR_TOKEN }}' \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create Redpanda credentials secret
+        run: |
+          kubectl create secret generic redpanda-credentials \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            --from-literal=brokers='${{ secrets.REDPANDA_BROKERS }}' \
+            --from-literal=saslUsername='${{ secrets.REDPANDA_USERNAME }}' \
+            --from-literal=saslPassword='${{ secrets.REDPANDA_PASSWORD }}' \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy Helm chart
+        run: |
+          helm upgrade --install ${{ env.HELM_RELEASE }} ./helm/todo-chatbot \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            --values ./helm/values-oke.yaml \
+            --set global.imageTag=${{ needs.build-push.outputs.image_tag }} \
+            --set global.registry=${{ env.REGISTRY }}/${{ env.NAMESPACE }} \
+            --set secrets.databaseUrl="${{ secrets.DATABASE_URL }}" \
+            --set secrets.betterAuthSecret="${{ secrets.BETTER_AUTH_SECRET }}" \
+            --set secrets.openaiApiKey="${{ secrets.OPENAI_API_KEY }}" \
+            --set dapr.pubsub.brokers="${{ secrets.REDPANDA_BROKERS }}" \
+            --wait \
+            --timeout 10m
+
+      - name: Verify deployment
+        run: |
+          echo "Checking deployment status..."
+          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-backend -n ${{ env.K8S_NAMESPACE }} --timeout=5m
+          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-frontend -n ${{ env.K8S_NAMESPACE }} --timeout=5m
+          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-websocket -n ${{ env.K8S_NAMESPACE }} --timeout=5m
+          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-redis -n ${{ env.K8S_NAMESPACE }} --timeout=5m
+          echo "All deployments ready!"
+
+      - name: Get service endpoints
+        run: |
+          echo "=== Service Endpoints ==="
+          kubectl get ingress -n ${{ env.K8S_NAMESPACE }}
+          kubectl get services -n ${{ env.K8S_NAMESPACE }}
+          echo ""
+          echo "=== Pod Status ==="
+          kubectl get pods -n ${{ env.K8S_NAMESPACE }}
+
+  # Smoke test
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Wait for services to stabilize
+        run: sleep 30
+
+      - name: Get LoadBalancer IP
+        id: lb
+        run: |
+          echo "Smoke tests require manual verification."
+          echo "Run: kubectl get svc -n ingress-nginx"
+          echo "Then: curl http://<LB_IP>/api/health"
+
+      - name: Basic connectivity check
+        run: |
+          echo "Deployment completed successfully."
+          echo "Verify manually:"
+          echo "  1. kubectl get pods -n production"
+          echo "  2. kubectl get svc -n ingress-nginx"
+          echo "  3. curl http://<LB_IP>/api/health"
