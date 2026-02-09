@@ -125,28 +125,19 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-push
     environment: production
+    env:
+      OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+      OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+      OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+      OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+      OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure OCI CLI
-        uses: oracle-actions/configure-oci-credentials@v1.3.2
+      - name: Configure kubectl for OKE
+        uses: oracle-actions/configure-kubectl-oke@v1.5.0
         with:
-          user: ${{ secrets.OCI_CLI_USER }}
-          fingerprint: ${{ secrets.OCI_CLI_FINGERPRINT }}
-          tenancy: ${{ secrets.OCI_CLI_TENANCY }}
-          region: ${{ secrets.OCI_CLI_REGION }}
-          api_key_content: ${{ secrets.OCI_CLI_KEY_CONTENT }}
-
-      - name: Get kubeconfig
-        uses: oracle-actions/run-oci-cli-command@v1.3.2
-        with:
-          command: >
-            ce cluster create-kubeconfig
-            --cluster-id ${{ secrets.OKE_CLUSTER_OCID }}
-            --file $HOME/.kube/config
-            --region ${{ secrets.OCI_CLI_REGION }}
-            --token-version 2.0.0
-            --kube-endpoint PUBLIC_ENDPOINT
+          cluster: ${{ secrets.OKE_CLUSTER_OCID }}
 
       - name: Verify cluster connection
         run: kubectl get nodes
