@@ -1,423 +1,367 @@
-# Operational Runbook - Todo Chatbot (Phase V)
+# Operational Runbook: Todo Chatbot (Phase V)
 
-This runbook provides operational procedures for managing the Todo Chatbot application on DigitalOcean Kubernetes Service (DOKS).
-
-## Table of Contents
-
-1. [Architecture Overview](#architecture-overview)
-2. [Health Checks](#health-checks)
-3. [Common Operations](#common-operations)
-4. [Troubleshooting](#troubleshooting)
-5. [Incident Response](#incident-response)
-6. [Monitoring](#monitoring)
+Per T094: Operational procedures for the cloud-native event-driven architecture.
 
 ---
 
-## Architecture Overview
+## Service Overview
 
-### Services
+| Service | Port | Description | Health Endpoint |
+|---------|------|-------------|-----------------|
+| Backend (FastAPI) | 8000 | Core API, task CRUD, auth | `/api/health`, `/api/health/ready` |
+| Frontend (Next.js) | 3000 | Web UI | `/` |
+| WebSocket Service | 8001 | Real-time task sync | `/health`, `/health/ready` |
+| Recurring Task Service | 8002 | Auto-creates recurring task instances | `/health`, `/health/ready` |
+| Notification Service | 8003 | Reminder delivery | `/health`, `/health/ready` |
 
-| Service | Port | Description |
-|---------|------|-------------|
-| backend | 8000 | FastAPI main API server |
-| frontend | 3000 | Next.js web application |
-| websocket | 8001 | WebSocket real-time sync |
-| recurring-task | 8002 | Recurring task automation |
-| notification | 8003 | Notification delivery |
+### Infrastructure Dependencies
 
-### Dependencies
-
-- **PostgreSQL**: Neon serverless (external)
-- **Redis**: DigitalOcean Managed Redis (state store)
-- **Redpanda/Kafka**: DigitalOcean Managed Kafka (pub/sub)
-- **Dapr**: Sidecar for service mesh
-
-### Topics
-
-| Topic | Publishers | Consumers |
-|-------|------------|-----------|
-| task-events | backend | recurring-task, websocket |
-| task-updates | backend | websocket |
-| reminders | backend | notification |
-
----
-
-## Health Checks
-
-### Check All Pods Status
-
-```bash
-kubectl get pods -n todo-chatbot
-```
-
-Expected: All pods should be `Running` with `READY` status matching container count.
-
-### Check Individual Service Health
-
-```bash
-# Backend
-kubectl exec -it deploy/todo-chatbot-backend -n todo-chatbot -- curl localhost:8000/health
-
-# WebSocket
-kubectl exec -it deploy/todo-chatbot-websocket -n todo-chatbot -- curl localhost:8001/health
-
-# Recurring Task
-kubectl exec -it deploy/todo-chatbot-recurring-task -n todo-chatbot -- curl localhost:8002/health
-
-# Notification
-kubectl exec -it deploy/todo-chatbot-notification -n todo-chatbot -- curl localhost:8003/health
-```
-
-### Check Dapr Sidecar Health
-
-```bash
-# View Dapr dashboard (port-forward)
-kubectl port-forward svc/dapr-dashboard -n dapr-system 8080:8080
-
-# Or check via CLI
-dapr dashboard -k -n todo-chatbot
-```
-
-### Check Readiness Probes
-
-```bash
-# Check if services are ready to accept traffic
-kubectl get endpoints -n todo-chatbot
-```
+| Component | Purpose | Local | Production |
+|-----------|---------|-------|------------|
+| PostgreSQL (Neon) | Primary database | Neon Cloud | Neon Cloud |
+| Redpanda | Event streaming (Kafka-compatible) | Docker / Redpanda Cloud | Redpanda Cloud |
+| Redis | Dapr state store | Docker | In-cluster or managed |
+| Dapr | Sidecar for pub/sub, state, secrets | `dapr init` | Dapr on K8s |
 
 ---
 
 ## Common Operations
 
-### View Logs
+### 1. Check Service Health
 
 ```bash
-# Backend logs
-kubectl logs -f deploy/todo-chatbot-backend -n todo-chatbot
+# Backend
+curl http://localhost:8000/api/health
+curl http://localhost:8000/api/health/ready
 
-# WebSocket logs (with Dapr sidecar)
-kubectl logs -f deploy/todo-chatbot-websocket -n todo-chatbot -c websocket
+# WebSocket
+curl http://localhost:8001/health
+curl http://localhost:8001/health/ready
+curl http://localhost:8001/stats
 
-# Dapr sidecar logs
-kubectl logs -f deploy/todo-chatbot-backend -n todo-chatbot -c daprd
+# Recurring Task
+curl http://localhost:8002/health
+curl http://localhost:8002/health/ready
+
+# Notification
+curl http://localhost:8003/health
+curl http://localhost:8003/health/ready
 ```
 
-### View Structured Logs (JSON)
+### 2. Kubernetes Pod Health
 
 ```bash
-# Parse JSON logs with jq
-kubectl logs deploy/todo-chatbot-backend -n todo-chatbot | jq '.'
+# Check all pods
+kubectl get pods -l app.kubernetes.io/instance=todo-chatbot
 
-# Filter by log level
-kubectl logs deploy/todo-chatbot-backend -n todo-chatbot | jq 'select(.level == "ERROR")'
+# Check specific service
+kubectl get pods -l app.kubernetes.io/component=backend
+kubectl get pods -l app.kubernetes.io/component=websocket
+kubectl get pods -l app.kubernetes.io/component=recurring-task
+kubectl get pods -l app.kubernetes.io/component=notification
 
-# Filter by correlation ID
-kubectl logs deploy/todo-chatbot-backend -n todo-chatbot | jq 'select(.correlation_id == "abc123")'
+# Describe a pod for events and probe status
+kubectl describe pod <pod-name>
+
+# Check pod logs
+kubectl logs <pod-name> --tail=100 -f
 ```
 
-### Scale Services
+### 3. Dapr Dashboard
 
 ```bash
-# Scale WebSocket for more connections
-kubectl scale deploy/todo-chatbot-websocket -n todo-chatbot --replicas=3
+# Local development
+dapr dashboard
+# Opens http://localhost:8080
 
-# Scale via Helm
-helm upgrade todo-chatbot ./helm/todo-chatbot \
-  --set websocket.replicaCount=3 \
-  -n todo-chatbot
+# Kubernetes
+kubectl port-forward svc/dapr-dashboard 8080:8080 -n dapr-system
 ```
 
-### Rolling Restart
+Verify in the dashboard:
+- All components show "healthy" status
+- Subscriptions are correctly registered
+- Application IDs match expected services
+
+---
+
+## Event Streaming Operations
+
+### 4. Redpanda Topic Management
 
 ```bash
-# Restart backend (triggers rolling update)
-kubectl rollout restart deploy/todo-chatbot-backend -n todo-chatbot
+# List topics
+rpk topic list --brokers localhost:9092
 
-# Check rollout status
-kubectl rollout status deploy/todo-chatbot-backend -n todo-chatbot
+# Check topic details
+rpk topic describe task-events --brokers localhost:9092
+rpk topic describe task-updates --brokers localhost:9092
+rpk topic describe reminders --brokers localhost:9092
+
+# Consume recent messages (for debugging)
+rpk topic consume task-events --brokers localhost:9092 --num 10
+rpk topic consume task-updates --brokers localhost:9092 --num 10
+rpk topic consume reminders --brokers localhost:9092 --num 10
+
+# Check consumer groups (lag monitoring)
+rpk group list --brokers localhost:9092
+rpk group describe <group-name> --brokers localhost:9092
 ```
 
-### Rollback Deployment
+### 5. Redpanda Cloud (Production)
 
 ```bash
-# View rollout history
-kubectl rollout history deploy/todo-chatbot-backend -n todo-chatbot
+# Set profile
+rpk profile create prod --set brokers=<cluster>.redpanda.cloud:9092 \
+  --set tls.enabled=true \
+  --set sasl.mechanism=SCRAM-SHA-256 \
+  --set sasl.user=<username> \
+  --set sasl.password=<password>
 
-# Rollback to previous version
-kubectl rollout undo deploy/todo-chatbot-backend -n todo-chatbot
-
-# Rollback to specific revision
-kubectl rollout undo deploy/todo-chatbot-backend -n todo-chatbot --to-revision=2
+# Use profile
+rpk topic list --profile prod
+rpk group list --profile prod
 ```
 
 ---
 
 ## Troubleshooting
 
-### Pod Not Starting
+### 6. Events Not Flowing
 
-1. Check pod events:
-   ```bash
-   kubectl describe pod <pod-name> -n todo-chatbot
-   ```
+**Symptoms**: Tasks created in UI don't trigger recurring task creation or real-time sync.
 
-2. Common issues:
-   - **ImagePullBackOff**: Check image registry credentials
-   - **CrashLoopBackOff**: Check container logs
-   - **Pending**: Check node resources or PVC status
+**Diagnosis**:
+```bash
+# 1. Check Dapr sidecar health
+curl http://localhost:3500/v1.0/healthz
 
-### Dapr Sidecar Issues
+# 2. Check Dapr metadata (shows registered subscriptions)
+curl http://localhost:3500/v1.0/metadata | python -m json.tool
 
-1. Check Dapr status:
-   ```bash
-   kubectl get pods -n todo-chatbot -o wide
-   # Look for 2/2 Ready (app + sidecar)
-   ```
+# 3. Check backend logs for event publishing errors
+kubectl logs -l app.kubernetes.io/component=backend --tail=50 | grep "event_publish"
 
-2. Check Dapr components:
-   ```bash
-   kubectl get components -n todo-chatbot
-   ```
+# 4. Check consumer service logs
+kubectl logs -l app.kubernetes.io/component=recurring-task --tail=50
+kubectl logs -l app.kubernetes.io/component=notification --tail=50
 
-3. Check Dapr subscriptions:
-   ```bash
-   kubectl get subscriptions -n todo-chatbot
-   ```
+# 5. Verify topics have messages
+rpk topic consume task-events --brokers localhost:9092 --num 5
+```
 
-4. Verify pub/sub connectivity:
-   ```bash
-   kubectl exec -it deploy/todo-chatbot-backend -n todo-chatbot -c daprd -- \
-     wget -qO- http://localhost:3500/v1.0/metadata
-   ```
+**Resolution**:
+- If Dapr sidecar is unhealthy: restart the pod (`kubectl delete pod <name>`)
+- If topics are empty: check backend event publisher logs
+- If topics have messages but consumers aren't processing: check consumer group lag
 
-### WebSocket Connection Issues
+### 7. WebSocket Connections Failing
 
-1. Check WebSocket stats:
-   ```bash
-   kubectl exec -it deploy/todo-chatbot-websocket -n todo-chatbot -- curl localhost:8001/stats
-   ```
+**Symptoms**: Real-time sync not working, connection status shows disconnected.
 
-2. Check for connection limits:
-   ```bash
-   kubectl top pod -n todo-chatbot | grep websocket
-   ```
+**Diagnosis**:
+```bash
+# 1. Check WebSocket service health
+curl http://localhost:8001/health
 
-3. Verify JWT authentication:
-   - Check `JWT_SECRET` environment variable matches `BETTER_AUTH_SECRET`
+# 2. Check connection stats
+curl http://localhost:8001/stats
 
-### Database Connection Issues
+# 3. Check WebSocket logs
+kubectl logs -l app.kubernetes.io/component=websocket --tail=50
 
-1. Test database connectivity:
-   ```bash
-   kubectl exec -it deploy/todo-chatbot-backend -n todo-chatbot -- \
-     python -c "from app.database import engine; print('Connected!')"
-   ```
+# 4. Test WebSocket connectivity
+# In browser console:
+# new WebSocket('ws://localhost:8001/ws?token=<jwt>')
+```
 
-2. Check secrets:
-   ```bash
-   kubectl get secret todo-chatbot-secrets -n todo-chatbot -o yaml
-   ```
+**Resolution**:
+- If service is unhealthy: check resource limits, restart pod
+- If auth fails: verify JWT secret matches between backend and websocket service
+- If Dapr subscription issues: check `/dapr/subscribe` endpoint returns correct config
 
-### Event Publishing Failures
+### 8. Database Connection Issues
 
-1. Check Redpanda/Kafka connectivity:
-   ```bash
-   # From backend pod
-   kubectl exec -it deploy/todo-chatbot-backend -n todo-chatbot -c daprd -- \
-     wget -qO- http://localhost:3500/v1.0/healthz
-   ```
+**Symptoms**: Backend returns 503, readiness probe fails.
 
-2. Check topic exists:
-   ```bash
-   rpk topic list --brokers <broker-url> --tls-enabled --sasl-mechanism SCRAM-SHA-256
-   ```
+**Diagnosis**:
+```bash
+# 1. Check readiness endpoint
+curl http://localhost:8000/api/health/ready
 
-3. Monitor failed publishes in logs:
-   ```bash
-   kubectl logs deploy/todo-chatbot-backend -n todo-chatbot | grep -i "publish.*fail"
-   ```
+# 2. Check backend logs
+kubectl logs -l app.kubernetes.io/component=backend --tail=50 | grep "database"
+
+# 3. Verify DATABASE_URL secret
+kubectl get secret todo-chatbot-secrets -o jsonpath='{.data.DATABASE_URL}' | base64 -d
+```
+
+**Resolution**:
+- Verify Neon database is accessible (check Neon dashboard)
+- Ensure DATABASE_URL has `?sslmode=require` for Neon connections
+- Check if connection pool is exhausted (restart pod to reset)
+
+### 9. Reminder Notifications Not Sending
+
+**Symptoms**: Tasks with due dates don't trigger reminder notifications.
+
+**Diagnosis**:
+```bash
+# 1. Check notification service logs
+kubectl logs -l app.kubernetes.io/component=notification --tail=50 | grep "reminder"
+
+# 2. Check if reminder events are being published
+rpk topic consume reminders --brokers localhost:9092 --num 5
+
+# 3. Check scheduler status
+kubectl logs -l app.kubernetes.io/component=notification --tail=50 | grep "scheduler"
+```
+
+**Resolution**:
+- If no events on `reminders` topic: check backend reminder publisher
+- If events exist but not processed: check notification service handlers
+- If quiet hours: verify user preference settings
 
 ---
 
-## Incident Response
+## Deployment Operations
 
-### High Error Rate
+### 10. Deploy with Helm
 
-1. Check error logs:
-   ```bash
-   kubectl logs deploy/todo-chatbot-backend -n todo-chatbot --since=5m | jq 'select(.level == "ERROR")'
-   ```
+```bash
+# Local (Minikube/Docker Desktop)
+helm upgrade --install todo-chatbot helm/todo-chatbot \
+  -f helm/todo-chatbot/values.yaml \
+  -f helm/todo-chatbot/values-local.yaml
 
-2. Check external dependencies:
-   - Neon dashboard for database status
-   - DigitalOcean dashboard for Kafka/Redis status
+# DOKS (DigitalOcean)
+helm upgrade --install todo-chatbot helm/todo-chatbot \
+  -f helm/todo-chatbot/values.yaml \
+  -f helm/values-doks.yaml
 
-3. Scale up if needed:
-   ```bash
-   kubectl scale deploy/todo-chatbot-backend -n todo-chatbot --replicas=3
-   ```
+# GKE (Google Cloud)
+helm upgrade --install todo-chatbot helm/todo-chatbot \
+  -f helm/todo-chatbot/values.yaml \
+  -f helm/values-gke.yaml
 
-### WebSocket Disconnections
+# OKE (Oracle Cloud)
+helm upgrade --install todo-chatbot helm/todo-chatbot \
+  -f helm/todo-chatbot/values.yaml \
+  -f helm/values-oke.yaml
+```
 
-1. Check connection count:
-   ```bash
-   kubectl exec -it deploy/todo-chatbot-websocket -n todo-chatbot -- curl localhost:8001/stats
-   ```
+### 11. Rolling Restart (Zero-Downtime)
 
-2. Check for OOM kills:
-   ```bash
-   kubectl describe pod -l app.kubernetes.io/component=websocket -n todo-chatbot | grep -A5 "State:"
-   ```
+```bash
+# Restart a specific component
+kubectl rollout restart deployment/todo-chatbot-backend
+kubectl rollout restart deployment/todo-chatbot-websocket
+kubectl rollout restart deployment/todo-chatbot-recurring-task
+kubectl rollout restart deployment/todo-chatbot-notification
 
-3. Increase resources if needed:
-   ```bash
-   helm upgrade todo-chatbot ./helm/todo-chatbot \
-     --set websocket.resources.limits.memory=512Mi \
-     -n todo-chatbot
-   ```
+# Watch rollout status
+kubectl rollout status deployment/todo-chatbot-backend
+```
 
-### Message Processing Delays
+### 12. Rollback
 
-1. Check consumer lag:
-   ```bash
-   rpk group describe recurring-task-service --brokers <broker-url>
-   ```
+```bash
+# Check rollout history
+kubectl rollout history deployment/todo-chatbot-backend
 
-2. Scale consumers:
-   ```bash
-   kubectl scale deploy/todo-chatbot-recurring-task -n todo-chatbot --replicas=2
-   ```
+# Rollback to previous version
+kubectl rollout undo deployment/todo-chatbot-backend
 
-3. Check for processing errors:
-   ```bash
-   kubectl logs deploy/todo-chatbot-recurring-task -n todo-chatbot | grep -i error
-   ```
-
-### Complete Outage
-
-1. Check all pods:
-   ```bash
-   kubectl get pods -n todo-chatbot
-   ```
-
-2. Check node status:
-   ```bash
-   kubectl get nodes
-   kubectl describe node <node-name>
-   ```
-
-3. Check recent events:
-   ```bash
-   kubectl get events -n todo-chatbot --sort-by='.lastTimestamp'
-   ```
-
-4. Emergency rollback:
-   ```bash
-   helm rollback todo-chatbot -n todo-chatbot
-   ```
+# Rollback Helm release
+helm rollback todo-chatbot <revision>
+helm history todo-chatbot
+```
 
 ---
 
 ## Monitoring
 
-### Key Metrics
+### 13. Log Aggregation
 
-| Metric | Warning | Critical | Action |
-|--------|---------|----------|--------|
-| Pod restart count | > 3/hour | > 10/hour | Check logs, scale |
-| API latency p95 | > 500ms | > 2s | Scale, check DB |
-| WebSocket connections | > 400 | > 480 | Scale websocket |
-| Kafka consumer lag | > 100 | > 1000 | Scale consumers |
-| Error rate | > 1% | > 5% | Check logs, rollback |
-
-### Prometheus Queries (if configured)
-
-```promql
-# Request rate
-rate(http_requests_total{namespace="todo-chatbot"}[5m])
-
-# Error rate
-sum(rate(http_requests_total{namespace="todo-chatbot",status=~"5.."}[5m]))
-/ sum(rate(http_requests_total{namespace="todo-chatbot"}[5m]))
-
-# Latency p95
-histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{namespace="todo-chatbot"}[5m]))
-
-# WebSocket connections
-websocket_active_connections{namespace="todo-chatbot"}
-```
-
-### Dapr Dashboard
-
-Access Dapr dashboard for service mesh visibility:
+All services emit structured JSON logs with correlation IDs.
 
 ```bash
-kubectl port-forward svc/dapr-dashboard -n dapr-system 8080:8080
+# Backend structured logs (JSON format)
+kubectl logs -l app.kubernetes.io/component=backend --tail=100 | python -m json.tool
+
+# Filter by correlation ID across services
+CORR_ID="abc-123"
+kubectl logs -l app.kubernetes.io/instance=todo-chatbot --all-containers \
+  | grep "$CORR_ID"
+
+# Follow logs for all services
+kubectl logs -l app.kubernetes.io/instance=todo-chatbot --all-containers -f
 ```
 
-Dashboard shows:
-- Component health (pub/sub, state store)
-- Service invocation metrics
-- Pub/sub message flow
-
----
-
-## Maintenance Windows
-
-### Before Maintenance
-
-1. Notify users via status page
-2. Scale up services for buffer
-3. Ensure recent backup exists
-
-### During Maintenance
-
-1. Apply changes via Helm
-2. Monitor rollout status
-3. Verify health checks pass
-
-### After Maintenance
-
-1. Run smoke tests
-2. Monitor error rates for 15 minutes
-3. Update status page
-
----
-
-## Contact
-
-- **On-call**: Check PagerDuty rotation
-- **Escalation**: Platform team Slack channel
-- **External**: DigitalOcean support (for managed services)
-
----
-
-## Appendix
-
-### Environment Variables
-
-| Variable | Service | Description |
-|----------|---------|-------------|
-| DATABASE_URL | backend, recurring-task, notification | Neon PostgreSQL connection |
-| BETTER_AUTH_SECRET | backend, frontend, websocket | JWT signing secret |
-| DAPR_HTTP_PORT | all services | Dapr sidecar port (3500) |
-| BACKEND_URL | frontend, recurring-task, notification | Internal backend URL |
-
-### Useful Commands
+### 14. Resource Monitoring
 
 ```bash
-# Get all resources
-kubectl get all -n todo-chatbot
+# Resource usage
+kubectl top pods -l app.kubernetes.io/instance=todo-chatbot
 
-# Watch pods
-kubectl get pods -n todo-chatbot -w
+# Check resource quotas
+kubectl describe resourcequota
 
-# Port forward for local access
-kubectl port-forward svc/todo-chatbot-frontend -n todo-chatbot 3000:3000
-
-# Execute shell in pod
-kubectl exec -it deploy/todo-chatbot-backend -n todo-chatbot -- /bin/sh
-
-# Copy files from pod
-kubectl cp todo-chatbot/todo-chatbot-backend-xxx:/app/logs ./local-logs
+# Check HPA status (if configured)
+kubectl get hpa
 ```
+
+---
+
+## Emergency Procedures
+
+### 15. Service Isolation
+
+If a microservice is causing issues, disable it without affecting the core:
+
+```bash
+# Scale down a problematic service
+kubectl scale deployment/todo-chatbot-notification --replicas=0
+
+# Re-enable
+kubectl scale deployment/todo-chatbot-notification --replicas=1
+```
+
+### 16. Circuit Break Event Publishing
+
+If event publishing is causing cascading failures:
+
+```bash
+# Check event publisher fallback queue
+curl http://localhost:8000/api/health/ready  # Shows Dapr status
+
+# Restart Dapr sidecar (kills sidecar, K8s recreates)
+kubectl delete pod -l app.kubernetes.io/component=backend
+```
+
+### 17. Database Migration Rollback
+
+```bash
+# Check current migration
+cd backend
+uv run alembic current
+
+# Rollback one migration
+uv run alembic downgrade -1
+
+# Rollback to specific revision
+uv run alembic downgrade <revision>
+```
+
+---
+
+## Scheduled Maintenance
+
+| Task | Frequency | Procedure |
+|------|-----------|-----------|
+| Check pod health | Continuous | K8s probes (automated) |
+| Review consumer lag | Daily | `rpk group list` |
+| Check Neon DB size | Weekly | Neon dashboard |
+| Update container images | Per release | CI/CD pipeline |
+| Rotate secrets | Monthly | Update K8s secrets, restart pods |
+| Review log volume | Weekly | Check storage usage |

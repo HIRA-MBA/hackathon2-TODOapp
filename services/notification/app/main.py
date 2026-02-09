@@ -4,6 +4,7 @@ Per T076-T083: Subscribes to reminders topic and handles notification delivery
 with quiet hours respect and multi-channel support.
 """
 
+import asyncio
 import logging
 import os
 import sys
@@ -17,6 +18,7 @@ from app.handlers import (
     handle_reminder_trigger,
     process_pending_notifications,
 )
+from app.scheduler import run_scheduler
 
 # Configure structured JSON logging
 logging.basicConfig(
@@ -31,7 +33,16 @@ logger = logging.getLogger("notification-service")
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     logger.info("Notification service starting")
+    # Start the reminder scheduler as a background task
+    scheduler_task = asyncio.create_task(run_scheduler())
+    logger.info("Reminder scheduler background task started")
     yield
+    # Cancel the scheduler on shutdown
+    scheduler_task.cancel()
+    try:
+        await scheduler_task
+    except asyncio.CancelledError:
+        pass
     logger.info("Notification service shutting down")
 
 
