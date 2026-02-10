@@ -42,11 +42,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Set up QEMU (for ARM cross-compilation)
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/arm64
-
       - name: Login to OCIR
         run: |
           echo "${{ secrets.OCIR_TOKEN }}" | docker login \
@@ -54,12 +49,12 @@ jobs:
             -u "${{ secrets.OCIR_USERNAME }}" \
             --password-stdin
 
-      # Build Backend (ARM64 for OKE A1 nodes)
+      # Build Backend
       - name: Build and push backend
         uses: docker/build-push-action@v5
         with:
           context: ./backend
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/todo-backend:${{ steps.meta.outputs.version }}
@@ -72,7 +67,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/todo-frontend:${{ steps.meta.outputs.version }}
@@ -85,7 +80,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./services/websocket
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/websocket-service:${{ steps.meta.outputs.version }}
@@ -98,7 +93,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./services/recurring-task
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/recurring-task-service:${{ steps.meta.outputs.version }}
@@ -111,7 +106,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./services/notification
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/notification-service:${{ steps.meta.outputs.version }}
