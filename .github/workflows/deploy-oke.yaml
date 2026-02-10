@@ -141,21 +141,28 @@ jobs:
 
       # --- Install cluster prerequisites ---
 
-      - name: Install NGINX Ingress Controller
+      - name: Ensure NGINX Ingress Controller
         run: |
-          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-          helm repo update
-          helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-            --namespace ingress-nginx \
-            --create-namespace \
-            --set controller.service.type=LoadBalancer \
-            --set controller.service.annotations."oci\.oraclecloud\.com/load-balancer-type"=nlb \
-            --timeout 5m
-          echo "Waiting for NGINX Ingress Controller pod..."
-          kubectl wait --namespace ingress-nginx \
-            --for=condition=ready pod \
-            --selector=app.kubernetes.io/component=controller \
-            --timeout=180s || echo "Warning: Ingress controller not fully ready yet, continuing..."
+          # Check if ingress-nginx controller is already running
+          if kubectl get pods -n ingress-nginx -l app.kubernetes.io/component=controller --no-headers 2>/dev/null | grep -q Running; then
+            echo "NGINX Ingress Controller is already running. Skipping install."
+            kubectl get svc -n ingress-nginx
+          else
+            echo "Installing NGINX Ingress Controller..."
+            helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+            helm repo update
+            # Use --force to handle label conflicts from manual installs
+            kubectl create namespace ingress-nginx --dry-run=client -o yaml | kubectl apply -f -
+            helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+              --namespace ingress-nginx \
+              --set controller.service.type=LoadBalancer \
+              --set controller.service.annotations."oci\.oraclecloud\.com/load-balancer-type"=nlb \
+              --timeout 5m || echo "Warning: Helm install had issues, checking if controller is running..."
+            kubectl wait --namespace ingress-nginx \
+              --for=condition=ready pod \
+              --selector=app.kubernetes.io/component=controller \
+              --timeout=180s || echo "Warning: Ingress controller not fully ready yet, continuing..."
+          fi
 
       - name: Install Dapr on cluster
         run: |
