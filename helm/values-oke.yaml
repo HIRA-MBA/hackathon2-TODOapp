@@ -242,9 +242,11 @@ secrets:
 dapr:
   enabled: true
   pubsub:
-    # Redpanda Serverless configuration (SASL_SSL)
-    brokers: ""  # e.g., "seed-xxxxx.redpanda.com:9092"
+    # Use in-cluster Redis for pub/sub (Redpanda blocks cloud IPs on free tier)
+    type: "redis"  # "redis" for in-cluster Redis, "kafka" for Redpanda/Kafka
     consumerGroup: "todo-chatbot-prod"
+    # Kafka/Redpanda settings (only used when type=kafka)
+    brokers: ""
     authType: "password"
     saslMechanism: "SCRAM-SHA-256"
     tlsEnabled: true

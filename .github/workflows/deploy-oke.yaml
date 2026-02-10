@@ -245,7 +245,6 @@ jobs:
             --set global.registry=${{ env.REGISTRY }}/${{ env.NAMESPACE }} \
             --set secrets.betterAuthSecret="${{ secrets.BETTER_AUTH_SECRET }}" \
             --set secrets.openaiApiKey="${{ secrets.OPENAI_API_KEY }}" \
-            --set dapr.pubsub.brokers="${{ secrets.REDPANDA_BROKERS }}" \
             --timeout 10m
 
       # --- Verify ---
@@ -289,6 +288,8 @@ jobs:
             kubectl describe pod "$pod" -n ${{ env.K8S_NAMESPACE }} 2>/dev/null | tail -25
             echo "--- Logs: $pod ---"
             kubectl logs "$pod" -n ${{ env.K8S_NAMESPACE }} --tail=15 2>/dev/null || echo "No logs available"
+            echo "--- Dapr sidecar logs: $pod ---"
+            kubectl logs "$pod" -c daprd -n ${{ env.K8S_NAMESPACE }} --tail=15 2>/dev/null || echo "No daprd container"
             echo ""
           done
           echo ""

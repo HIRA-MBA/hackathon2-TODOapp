@@ -5,6 +5,23 @@ metadata:
   name: pubsub
   namespace: {{ .Release.Namespace }}
 spec:
+  {{- if eq (default "kafka" .Values.dapr.pubsub.type) "redis" }}
+  type: pubsub.redis
+  version: v1
+  metadata:
+    - name: redisHost
+      {{- if .Values.dapr.statestore.inCluster }}
+      value: "{{ include "todo-chatbot.fullname" . }}-redis:6379"
+      {{- else }}
+      value: {{ .Values.dapr.pubsub.redisHost | default "redis:6379" | quote }}
+      {{- end }}
+    {{- if .Values.dapr.pubsub.redisPassword }}
+    - name: redisPassword
+      value: {{ .Values.dapr.pubsub.redisPassword | quote }}
+    {{- end }}
+    - name: consumerID
+      value: {{ .Values.dapr.pubsub.consumerGroup | default "todo-chatbot" | quote }}
+  {{- else }}
   type: pubsub.kafka
   version: v1
   metadata:
@@ -64,4 +81,5 @@ spec:
       value: {{ .Values.dapr.pubsub.maxMessageBytes | default "1048576" | quote }}
     - name: initialOffset
       value: {{ .Values.dapr.pubsub.initialOffset | default "newest" | quote }}
+  {{- end }}
 {{- end }}
