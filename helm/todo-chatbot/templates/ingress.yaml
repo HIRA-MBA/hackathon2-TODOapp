@@ -41,6 +41,10 @@ spec:
                 name: {{ include "todo-chatbot.fullname" $ }}-backend
                 port:
                   number: {{ $.Values.backend.service.port }}
+                {{- else if eq .service "websocket" }}
+                name: {{ include "todo-chatbot.fullname" $ }}-websocket
+                port:
+                  number: {{ $.Values.websocket.service.port }}
                 {{- end }}
           {{- end }}
     {{- end }}
