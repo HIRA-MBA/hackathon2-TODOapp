@@ -280,3 +280,36 @@ redis:
     enabled: false
     storageClass: ""
     size: "1Gi"
+
+# In-cluster PostgreSQL configuration
+postgresql:
+  enabled: false  # Set to true to deploy PostgreSQL in-cluster
+  image:
+    repository: docker.io/library/postgres
+    tag: 16-alpine
+    pullPolicy: IfNotPresent
+  database: "tododb"
+  username: "todouser"
+  password: ""
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  probes:
+    liveness:
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 3
+  persistence:
+    enabled: false
+    storageClass: ""
+    size: "5Gi"

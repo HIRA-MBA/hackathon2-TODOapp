@@ -19,8 +19,10 @@ from app.config.settings import get_settings
 config = context.config
 settings = get_settings()
 
-# Set the database URL from settings (convert to asyncpg driver, remove sslmode)
-db_url = settings.database_url.replace("?sslmode=require", "")
+# Set the database URL from settings (convert to asyncpg driver, handle sslmode)
+_raw_url = settings.database_url
+_needs_ssl = "sslmode=require" in _raw_url
+db_url = _raw_url.replace("?sslmode=require", "").replace("&sslmode=require", "")
 if not db_url.startswith("postgresql+asyncpg://"):
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 config.set_main_option("sqlalchemy.url", db_url)
@@ -69,13 +71,15 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with async engine."""
-    # Create SSL context for secure connection to Neon
-    ssl_context = ssl.create_default_context()
+    connect_args = {}
+    if _needs_ssl:
+        ssl_context = ssl.create_default_context()
+        connect_args["ssl"] = ssl_context
 
     connectable = create_async_engine(
         db_url,
         poolclass=pool.NullPool,
-        connect_args={"ssl": ssl_context},
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:

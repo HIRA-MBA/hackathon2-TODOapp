@@ -243,7 +243,6 @@ jobs:
             --values ./helm/values-oke.yaml \
             --set global.imageTag=${{ needs.build-push.outputs.image_tag }} \
             --set global.registry=${{ env.REGISTRY }}/${{ env.NAMESPACE }} \
-            --set secrets.databaseUrl="${{ secrets.DATABASE_URL }}" \
             --set secrets.betterAuthSecret="${{ secrets.BETTER_AUTH_SECRET }}" \
             --set secrets.openaiApiKey="${{ secrets.OPENAI_API_KEY }}" \
             --set dapr.pubsub.brokers="${{ secrets.REDPANDA_BROKERS }}" \
@@ -254,6 +253,7 @@ jobs:
       - name: Wait for rollouts
         run: |
           echo "Waiting for deployments to roll out..."
+          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-postgresql -n ${{ env.K8S_NAMESPACE }} --timeout=3m || true
           kubectl rollout status deployment/${{ env.HELM_RELEASE }}-redis -n ${{ env.K8S_NAMESPACE }} --timeout=3m || true
           kubectl rollout status deployment/${{ env.HELM_RELEASE }}-backend -n ${{ env.K8S_NAMESPACE }} --timeout=5m || true
           kubectl rollout status deployment/${{ env.HELM_RELEASE }}-frontend -n ${{ env.K8S_NAMESPACE }} --timeout=5m || true

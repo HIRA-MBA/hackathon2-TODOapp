@@ -18,6 +18,12 @@ spec:
       imagePullSecrets:
         {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
       {{- end }}
+      {{- if .Values.postgresql.enabled }}
+      initContainers:
+        - name: wait-for-postgresql
+          image: docker.io/library/postgres:16-alpine
+          command: ['sh', '-c', 'until pg_isready -h {{ include "todo-chatbot.fullname" . }}-postgresql -p 5432 -U {{ .Values.postgresql.username }}; do echo "Waiting for PostgreSQL..."; sleep 2; done']
+      {{- end }}
       containers:
         - name: backend
           image: "{{ .Values.global.registry | default "" }}{{ if .Values.global.registry }}/{{ end }}{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag | default .Values.global.imageTag }}"
