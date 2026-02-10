@@ -24,7 +24,10 @@ export const auth = betterAuth({
   // Database connection for user storage
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
+    // Only use SSL when connecting to external databases (sslmode in URL)
+    ...(process.env.DATABASE_URL?.includes("sslmode=require")
+      ? { ssl: { rejectUnauthorized: false } }
+      : {}),
   }),
 
   // Secret for signing tokens

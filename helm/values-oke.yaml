@@ -211,6 +211,9 @@ ingress:
         - path: /
           pathType: Prefix
           service: frontend
+        - path: /api/auth
+          pathType: Prefix
+          service: frontend
         - path: /api
           pathType: Prefix
           service: backend
@@ -229,6 +232,7 @@ config:
   chatkitWorkflowId: ""
   mcpDefaultUserId: ""
   betterAuthTrustedOrigins: "*"  # Update with actual domain when available
+  disableSecureCookies: "true"  # No TLS yet, cookies must work over HTTP
 
 # Secrets (provide via kubectl create secret or CI/CD --set)
 secrets:
