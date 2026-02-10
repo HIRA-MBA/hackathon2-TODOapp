@@ -174,7 +174,6 @@ jobs:
             --set secrets.betterAuthSecret="${{ secrets.BETTER_AUTH_SECRET }}" \
             --set secrets.openaiApiKey="${{ secrets.OPENAI_API_KEY }}" \
             --set dapr.pubsub.brokers="${{ secrets.REDPANDA_BROKERS }}" \
-            --wait \
             --timeout 10m
 
       - name: Verify deployment
