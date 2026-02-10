@@ -19,8 +19,10 @@ from app.config.settings import get_settings
 config = context.config
 settings = get_settings()
 
-# Set the database URL from settings (remove sslmode for asyncpg compatibility)
+# Set the database URL from settings (convert to asyncpg driver, remove sslmode)
 db_url = settings.database_url.replace("?sslmode=require", "")
+if not db_url.startswith("postgresql+asyncpg://"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 config.set_main_option("sqlalchemy.url", db_url)
 
 if config.config_file_name is not None:
