@@ -12,11 +12,12 @@ global:
   imagePullSecrets:
     - name: ocir-secret
 
-# Frontend configuration (ARM-optimized, minimal resources)
+# Frontend configuration
 frontend:
   replicaCount: 1
   image:
     repository: todo-frontend
+    tag: ""
   service:
     type: ClusterIP
     port: 80
@@ -52,6 +53,7 @@ backend:
   replicaCount: 1
   image:
     repository: todo-backend
+    tag: ""
   service:
     type: ClusterIP
     port: 8000
@@ -88,6 +90,7 @@ websocket:
   replicaCount: 1
   image:
     repository: websocket-service
+    tag: ""
   service:
     type: ClusterIP
     port: 8001
@@ -124,6 +127,7 @@ recurringTask:
   replicaCount: 1
   image:
     repository: recurring-task-service
+    tag: ""
   service:
     type: ClusterIP
     port: 8002
@@ -160,6 +164,7 @@ notification:
   replicaCount: 1
   image:
     repository: notification-service
+    tag: ""
   service:
     type: ClusterIP
     port: 8003
@@ -263,7 +268,7 @@ dapr:
 redis:
   enabled: true
   image:
-    repository: redis
+    repository: docker.io/library/redis
     tag: 7-alpine
     pullPolicy: IfNotPresent
   resources:
