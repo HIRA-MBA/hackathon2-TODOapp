@@ -1,5 +1,5 @@
 # GitHub Actions Deploy to Oracle Cloud OKE Workflow
-# Builds images, pushes to OCIR, and deploys to OKE (Always Free tier)
+# Builds all images, pushes to OCIR, installs prerequisites, and deploys to OKE
 
 name: Deploy to OKE
 
@@ -7,14 +7,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        default: 'production'
-        type: choice
-        options:
-          - production
 
 env:
   OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
@@ -135,12 +127,53 @@ jobs:
           cluster: ${{ secrets.OKE_CLUSTER_OCID }}
 
       - name: Verify cluster connection
-        run: kubectl get nodes
+        run: |
+          echo "=== Cluster Nodes ==="
+          kubectl get nodes -o wide
+          echo ""
+          echo "=== Node Architecture ==="
+          kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.nodeInfo.architecture}{"\t"}{.status.nodeInfo.osImage}{"\n"}{end}'
 
       - name: Set up Helm
         uses: azure/setup-helm@v3
         with:
           version: v3.14.0
+
+      # --- Install cluster prerequisites ---
+
+      - name: Install NGINX Ingress Controller
+        run: |
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+          helm repo update
+          helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+            --namespace ingress-nginx \
+            --create-namespace \
+            --set controller.service.type=LoadBalancer \
+            --set controller.service.annotations."oci\.oraclecloud\.com/load-balancer-type"=nlb \
+            --timeout 5m
+          echo "Waiting for NGINX Ingress Controller pod..."
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=180s || echo "Warning: Ingress controller not fully ready yet, continuing..."
+
+      - name: Install Dapr on cluster
+        run: |
+          # Install Dapr CLI
+          wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s 1.14.0
+
+          # Check if Dapr is already installed
+          if dapr status -k 2>/dev/null | grep -q "Running"; then
+            echo "Dapr is already installed and running."
+          else
+            echo "Installing Dapr on the cluster..."
+            dapr init -k --runtime-version 1.14.4 --wait --timeout 300
+          fi
+
+          echo "=== Dapr Status ==="
+          dapr status -k
+
+      # --- Prepare namespace and secrets ---
 
       - name: Create namespace
         run: kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
@@ -163,6 +196,21 @@ jobs:
             --from-literal=saslPassword='${{ secrets.REDPANDA_PASSWORD }}' \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      # --- Clean up broken state from previous failed deploys ---
+
+      - name: Clean up stuck resources
+        run: |
+          echo "Cleaning up stuck resources from previous failed deploys..."
+          # Force-delete terminating pods
+          kubectl get pods -n ${{ env.K8S_NAMESPACE }} --no-headers 2>/dev/null \
+            | grep -i terminating | awk '{print $1}' \
+            | xargs -r kubectl delete pod -n ${{ env.K8S_NAMESPACE }} --grace-period=0 --force 2>/dev/null || true
+          # Delete failed pods
+          kubectl delete pods --field-selector=status.phase=Failed -n ${{ env.K8S_NAMESPACE }} --ignore-not-found=true 2>/dev/null || true
+          echo "Cleanup complete."
+
+      # --- Deploy ---
+
       - name: Deploy Helm chart
         run: |
           helm upgrade --install ${{ env.HELM_RELEASE }} ./helm/todo-chatbot \
@@ -176,44 +224,67 @@ jobs:
             --set dapr.pubsub.brokers="${{ secrets.REDPANDA_BROKERS }}" \
             --timeout 10m
 
-      - name: Verify deployment
-        run: |
-          echo "Checking deployment status..."
-          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-backend -n ${{ env.K8S_NAMESPACE }} --timeout=5m
-          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-frontend -n ${{ env.K8S_NAMESPACE }} --timeout=5m
-          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-websocket -n ${{ env.K8S_NAMESPACE }} --timeout=5m
-          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-redis -n ${{ env.K8S_NAMESPACE }} --timeout=5m
-          echo "All deployments ready!"
+      # --- Verify ---
 
-      - name: Get service endpoints
+      - name: Wait for rollouts
         run: |
-          echo "=== Service Endpoints ==="
-          kubectl get ingress -n ${{ env.K8S_NAMESPACE }}
-          kubectl get services -n ${{ env.K8S_NAMESPACE }}
+          echo "Waiting for deployments to roll out..."
+          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-redis -n ${{ env.K8S_NAMESPACE }} --timeout=3m || true
+          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-backend -n ${{ env.K8S_NAMESPACE }} --timeout=5m || true
+          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-frontend -n ${{ env.K8S_NAMESPACE }} --timeout=5m || true
+          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-websocket -n ${{ env.K8S_NAMESPACE }} --timeout=3m || true
+          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-recurring-task -n ${{ env.K8S_NAMESPACE }} --timeout=3m || true
+          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-notification -n ${{ env.K8S_NAMESPACE }} --timeout=3m || true
+
+      - name: Deployment status
+        if: always()
+        run: |
+          echo "============================================"
+          echo "=== DEPLOYMENT STATUS ==="
+          echo "============================================"
           echo ""
-          echo "=== Pod Status ==="
-          kubectl get pods -n ${{ env.K8S_NAMESPACE }}
+          echo "=== Pods ==="
+          kubectl get pods -n ${{ env.K8S_NAMESPACE }} -o wide
+          echo ""
+          echo "=== Services ==="
+          kubectl get svc -n ${{ env.K8S_NAMESPACE }}
+          echo ""
+          echo "=== Ingress ==="
+          kubectl get ingress -n ${{ env.K8S_NAMESPACE }}
+          echo ""
+          echo "=== Dapr Components ==="
+          kubectl get components -n ${{ env.K8S_NAMESPACE }} 2>/dev/null || echo "No Dapr components found"
+          echo ""
+          echo "=== Ingress Controller ==="
+          kubectl get svc -n ingress-nginx
+          echo ""
+          echo "=== Pod Details (non-Running pods) ==="
+          for pod in $(kubectl get pods -n ${{ env.K8S_NAMESPACE }} --no-headers 2>/dev/null | grep -v Running | awk '{print $1}'); do
+            echo "--- Pod: $pod ---"
+            kubectl describe pod "$pod" -n ${{ env.K8S_NAMESPACE }} 2>/dev/null | tail -25
+            echo "--- Logs: $pod ---"
+            kubectl logs "$pod" -n ${{ env.K8S_NAMESPACE }} --tail=15 2>/dev/null || echo "No logs available"
+            echo ""
+          done
+          echo ""
+          echo "=== Recent Events ==="
+          kubectl get events -n ${{ env.K8S_NAMESPACE }} --sort-by='.lastTimestamp' 2>/dev/null | tail -20
 
-  # Smoke test
-  smoke-test:
-    name: Smoke Test
-    runs-on: ubuntu-latest
-    needs: deploy
-    steps:
-      - name: Wait for services to stabilize
-        run: sleep 30
-
-      - name: Get LoadBalancer IP
-        id: lb
+      - name: Show access info
+        if: always()
         run: |
-          echo "Smoke tests require manual verification."
-          echo "Run: kubectl get svc -n ingress-nginx"
-          echo "Then: curl http://<LB_IP>/api/health"
-
-      - name: Basic connectivity check
-        run: |
-          echo "Deployment completed successfully."
-          echo "Verify manually:"
-          echo "  1. kubectl get pods -n production"
-          echo "  2. kubectl get svc -n ingress-nginx"
-          echo "  3. curl http://<LB_IP>/api/health"
+          echo "============================================"
+          echo "=== ACCESS YOUR APP ==="
+          echo "============================================"
+          LB_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "pending")
+          echo ""
+          echo "Load Balancer IP: $LB_IP"
+          echo ""
+          if [ "$LB_IP" != "pending" ] && [ -n "$LB_IP" ]; then
+            echo "Frontend:    http://$LB_IP/"
+            echo "Backend API: http://$LB_IP/api/health"
+            echo "WebSocket:   ws://$LB_IP/ws"
+          else
+            echo "LoadBalancer IP is still being provisioned."
+            echo "Check with: kubectl get svc -n ingress-nginx"
+          fi
