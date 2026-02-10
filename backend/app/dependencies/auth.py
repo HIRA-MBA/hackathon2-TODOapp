@@ -128,5 +128,14 @@ async def get_current_user(
     )
 
 
+async def get_current_user_id(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+) -> str:
+    """FastAPI dependency that returns just the current user's ID string."""
+    user = await get_current_user(request, credentials)
+    return user.user_id
+
+
 # Type alias for dependency injection
 CurrentUser = Annotated[AuthenticatedUser, Depends(get_current_user)]
