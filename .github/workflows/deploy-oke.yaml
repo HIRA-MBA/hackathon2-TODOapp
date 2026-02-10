@@ -203,6 +203,24 @@ jobs:
             --from-literal=saslPassword='${{ secrets.REDPANDA_PASSWORD }}' \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      # --- Network connectivity test ---
+
+      - name: Test connectivity to Neon PostgreSQL
+        run: |
+          echo "Testing DNS resolution and TCP connectivity to Neon..."
+          kubectl run nettest --image=busybox --restart=Never --rm -it \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            --command -- /bin/sh -c '
+              echo "=== DNS Resolution ==="
+              nslookup ep-blue-sound-ad16qodz-pooler.c-2.us-east-1.aws.neon.tech 2>&1 || echo "DNS FAILED"
+              echo ""
+              echo "=== TCP Connection Test (port 5432) ==="
+              nc -z -w 10 ep-blue-sound-ad16qodz-pooler.c-2.us-east-1.aws.neon.tech 5432 && echo "PORT 5432: OPEN" || echo "PORT 5432: BLOCKED/TIMEOUT"
+              echo ""
+              echo "=== TCP Connection Test (port 443) ==="
+              nc -z -w 10 ep-blue-sound-ad16qodz-pooler.c-2.us-east-1.aws.neon.tech 443 && echo "PORT 443: OPEN" || echo "PORT 443: BLOCKED/TIMEOUT"
+            ' 2>&1 || echo "Nettest pod failed"
+
       # --- Clean up broken state from previous failed deploys ---
 
       - name: Clean up stuck resources
