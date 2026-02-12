@@ -49,11 +49,10 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 30,
     // Update session if within 7 days of expiry
     updateAge: 60 * 60 * 24 * 7,
-    // Use cookies for storage
-    cookieCache: {
-      enabled: true,
-      maxAge: 60 * 5, // 5 minutes
-    },
+    // cookieCache disabled: Better Auth returns null (instead of falling through
+    // to DB) when the cache cookie's HMAC verification fails, causing false
+    // "session expired" redirects. Without cache, every request validates
+    // against the database which is reliable for our single-pod setup.
   },
 
   // Trusted origins for CORS/CSRF protection
@@ -77,10 +76,6 @@ export const auth = betterAuth({
     useSecureCookies:
       process.env.NODE_ENV === "production" &&
       process.env.DISABLE_SECURE_COOKIES !== "true",
-    defaultCookieAttributes: {
-      sameSite: "lax" as const,
-      path: "/",
-    },
   },
 
   // Plugins
