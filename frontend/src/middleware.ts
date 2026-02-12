@@ -70,6 +70,6 @@ export const config = {
   // Match all paths except static files and auth pages
   // Include API routes to add X-Request-ID for tracing (AC-030)
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/health).*)",
   ],
 };

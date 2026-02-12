@@ -63,9 +63,10 @@ export function SigninForm() {
         return;
       }
 
-      // Redirect to callback URL or dashboard
-      router.push(callbackUrl);
-      router.refresh();
+      // Full page navigation ensures the session cookie from the sign-in
+      // response is included in the dashboard request (avoids race conditions
+      // with router.push + router.refresh)
+      window.location.href = callbackUrl;
     } catch (error) {
       setGeneralError("An unexpected error occurred. Please try again.");
     } finally {

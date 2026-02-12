@@ -71,11 +71,9 @@ export const auth = betterAuth({
   // Cookie configuration
   advanced: {
     cookiePrefix: "better-auth",
-    // Use secure cookies only in production AND when not explicitly disabled
-    // For K8s over HTTP (no TLS), DISABLE_SECURE_COOKIES=true allows cookies to work
-    useSecureCookies:
-      process.env.NODE_ENV === "production" &&
-      process.env.DISABLE_SECURE_COOKIES !== "true",
+    // Explicitly false: deployment uses HTTP (no TLS), so cookies cannot have Secure flag.
+    // Browsers reject Set-Cookie with Secure over HTTP, causing session to vanish instantly.
+    useSecureCookies: false,
   },
 
   // Plugins

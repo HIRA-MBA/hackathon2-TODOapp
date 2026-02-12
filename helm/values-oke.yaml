@@ -31,19 +31,19 @@ frontend:
       cpu: "250m"
   probes:
     liveness:
-      path: /
+      path: /api/health
       initialDelaySeconds: 15
       periodSeconds: 30
       timeoutSeconds: 10
       failureThreshold: 3
     readiness:
-      path: /
+      path: /api/health
       initialDelaySeconds: 10
       periodSeconds: 10
       timeoutSeconds: 5
       failureThreshold: 3
     startup:
-      path: /
+      path: /api/health
       failureThreshold: 30
       periodSeconds: 10
       timeoutSeconds: 10

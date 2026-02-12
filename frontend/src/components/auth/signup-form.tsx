@@ -75,8 +75,9 @@ export function SignupForm() {
       }
 
       // T036: Auto-redirect to dashboard after successful signup
-      router.push("/dashboard");
-      router.refresh();
+      // Use window.location for a full page navigation to ensure cookies
+      // from the sign-up response are included in the dashboard request
+      window.location.href = "/dashboard";
     } catch (error) {
       setGeneralError("An unexpected error occurred. Please try again.");
     } finally {
