@@ -31,6 +31,11 @@ spec:
                 name: {{ include "todo-chatbot.configmapName" . }}
             - secretRef:
                 name: {{ include "todo-chatbot.secretName" . }}
+          env:
+            # Override BETTER_AUTH_URL for frontend: must be the PUBLIC URL
+            # (ConfigMap has the internal service URL for backend JWKS calls)
+            - name: BETTER_AUTH_URL
+              value: {{ .Values.config.publicBetterAuthUrl | default .Values.config.betterAuthUrl | quote }}
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           livenessProbe:

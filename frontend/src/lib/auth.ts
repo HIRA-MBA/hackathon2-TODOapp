@@ -14,8 +14,9 @@ function getBaseURL(): string {
   if (process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL}`;
   }
-  // Fallback to env variable or localhost
-  return process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "http://localhost:3000";
+  // BETTER_AUTH_URL is set to the public URL for the frontend pod (via env override)
+  // NEXT_PUBLIC_BETTER_AUTH_URL is the fallback (also public URL from ConfigMap)
+  return process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "http://localhost:3000";
 }
 
 const authBaseURL = getBaseURL();
@@ -24,6 +25,9 @@ export const auth = betterAuth({
   // Database connection for user storage
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
+    max: 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
     // Only use SSL when connecting to external databases (sslmode in URL)
     ...(process.env.DATABASE_URL?.includes("sslmode=require")
       ? { ssl: { rejectUnauthorized: false } }
@@ -69,10 +73,14 @@ export const auth = betterAuth({
   advanced: {
     cookiePrefix: "better-auth",
     // Use secure cookies only in production AND when not explicitly disabled
-    // For local K8s over HTTP, DISABLE_SECURE_COOKIES=true allows cookies to work
+    // For K8s over HTTP (no TLS), DISABLE_SECURE_COOKIES=true allows cookies to work
     useSecureCookies:
       process.env.NODE_ENV === "production" &&
       process.env.DISABLE_SECURE_COOKIES !== "true",
+    defaultCookieAttributes: {
+      sameSite: "lax" as const,
+      path: "/",
+    },
   },
 
   // Plugins
