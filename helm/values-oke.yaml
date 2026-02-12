@@ -229,9 +229,11 @@ config:
   corsOrigins: "*"  # Update with actual domain when available
   betterAuthUrl: "http://todo-chatbot-frontend:80"
   backendUrl: "http://todo-chatbot-backend:8000"
+  publicBackendUrl: "http://161.118.243.126/api"
   chatkitWorkflowId: ""
   mcpDefaultUserId: ""
-  betterAuthTrustedOrigins: "*"  # Update with actual domain when available
+  publicBetterAuthUrl: "http://161.118.243.126"
+  betterAuthTrustedOrigins: "http://161.118.243.126,http://161.118.243.126:80"
   disableSecureCookies: "true"  # No TLS yet, cookies must work over HTTP
 
 # Secrets (provide via kubectl create secret or CI/CD --set)

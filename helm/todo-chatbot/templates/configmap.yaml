@@ -11,7 +11,7 @@ data:
   BETTER_AUTH_URL: {{ .Values.config.betterAuthUrl | quote }}
   BACKEND_URL: {{ .Values.config.backendUrl | quote }}
   NEXT_PUBLIC_BACKEND_URL: {{ .Values.config.publicBackendUrl | default .Values.config.backendUrl | quote }}
-  NEXT_PUBLIC_BETTER_AUTH_URL: {{ .Values.config.betterAuthUrl | quote }}
+  NEXT_PUBLIC_BETTER_AUTH_URL: {{ .Values.config.publicBetterAuthUrl | default .Values.config.betterAuthUrl | quote }}
   OPENAI_CHATKIT_WORKFLOW_ID: {{ .Values.config.chatkitWorkflowId | quote }}
   MCP_DEFAULT_USER_ID: {{ .Values.config.mcpDefaultUserId | quote }}
   BETTER_AUTH_TRUSTED_ORIGINS: {{ .Values.config.betterAuthTrustedOrigins | quote }}
