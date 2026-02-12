@@ -59,17 +59,22 @@ spec:
             periodSeconds: {{ .Values.postgresql.probes.readiness.periodSeconds }}
             timeoutSeconds: {{ .Values.postgresql.probes.readiness.timeoutSeconds }}
             failureThreshold: {{ .Values.postgresql.probes.readiness.failureThreshold }}
-          {{- if .Values.postgresql.persistence.enabled }}
           volumeMounts:
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+            {{- if .Values.postgresql.persistence.enabled }}
             - name: postgresql-data
               mountPath: /var/lib/postgresql/data
-          {{- end }}
-      {{- if .Values.postgresql.persistence.enabled }}
+            {{- end }}
       volumes:
+        - name: init-scripts
+          configMap:
+            name: {{ include "todo-chatbot.fullname" . }}-postgresql-init
+        {{- if .Values.postgresql.persistence.enabled }}
         - name: postgresql-data
           persistentVolumeClaim:
             claimName: {{ include "todo-chatbot.fullname" . }}-postgresql-data
-      {{- end }}
+        {{- end }}
 ---
 {{- if .Values.postgresql.persistence.enabled }}
 apiVersion: v1

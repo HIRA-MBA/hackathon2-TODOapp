@@ -247,6 +247,17 @@ jobs:
             --set secrets.openaiApiKey="${{ secrets.OPENAI_API_KEY }}" \
             --timeout 10m
 
+      # --- Database setup ---
+
+      - name: Run Better Auth DB migrations
+        run: |
+          echo "Waiting for PostgreSQL to be ready..."
+          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-postgresql -n ${{ env.K8S_NAMESPACE }} --timeout=3m
+          PG_POD=$(kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app.kubernetes.io/component=postgresql --no-headers -o custom-columns=":metadata.name" | head -1)
+          echo "Running Better Auth table creation on pod: $PG_POD"
+          kubectl exec "$PG_POD" -n ${{ env.K8S_NAMESPACE }} -- psql -U todouser -d tododb -f /docker-entrypoint-initdb.d/init-better-auth.sql
+          echo "Better Auth tables created successfully"
+
       # --- Verify ---
 
       - name: Wait for rollouts
