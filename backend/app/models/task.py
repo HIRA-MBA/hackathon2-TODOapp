@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 class Priority(str, Enum):
     """Task priority levels."""
+
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"

@@ -54,7 +54,7 @@ class TestGetOrCreateConversation:
             id=uuid4(),
             user_id=TEST_USER_ID,
             created_at=datetime.utcnow(),
-            last_activity_at=datetime.utcnow()
+            last_activity_at=datetime.utcnow(),
         )
 
         mock_result = MagicMock()
@@ -139,21 +139,21 @@ class TestGetRecentMessages:
                 conversation_id=conv_id,
                 role="user",
                 content="Third",
-                created_at=now
+                created_at=now,
             ),
             Message(
                 id=uuid4(),
                 conversation_id=conv_id,
                 role="assistant",
                 content="Second",
-                created_at=now - timedelta(minutes=5)
+                created_at=now - timedelta(minutes=5),
             ),
             Message(
                 id=uuid4(),
                 conversation_id=conv_id,
                 role="user",
                 content="First",
-                created_at=now - timedelta(minutes=10)
+                created_at=now - timedelta(minutes=10),
             ),
         ]
 

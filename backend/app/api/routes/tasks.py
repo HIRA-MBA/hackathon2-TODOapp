@@ -74,6 +74,7 @@ def _task_to_response(task) -> TaskResponse:
 
 # Task CRUD Endpoints
 
+
 @router.get("", response_model=TaskListResponse)
 async def list_tasks(
     user: CurrentUser,
@@ -113,7 +114,10 @@ async def create_task(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Recurrence must have either end_date or max_occurrences",
             )
-        if data.recurrence.end_date is not None and data.recurrence.max_occurrences is not None:
+        if (
+            data.recurrence.end_date is not None
+            and data.recurrence.max_occurrences is not None
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Recurrence cannot have both end_date and max_occurrences",
@@ -236,6 +240,7 @@ async def delete_task(
 
 
 # Recurrence Endpoints (T033)
+
 
 @router.get("/{task_id}/recurrence", response_model=RecurrencePatternResponse)
 async def get_task_recurrence(

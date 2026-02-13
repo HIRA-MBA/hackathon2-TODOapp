@@ -18,6 +18,7 @@ def to_camel(string: str) -> str:
 
 # Recurrence Schemas
 
+
 class RecurrencePatternCreate(BaseModel):
     """Request schema for creating a recurrence pattern."""
 
@@ -77,6 +78,7 @@ class RecurrencePatternResponse(BaseModel):
 
 
 # Task Schemas
+
 
 class TaskCreate(BaseModel):
     """Request schema for creating a new task.
@@ -158,7 +160,7 @@ class TaskResponse(BaseModel):
         if v is not None:
             return v
         # Check if recurrence_id is set
-        data = info.data if hasattr(info, 'data') else {}
+        data = info.data if hasattr(info, "data") else {}
         return data.get("recurrence_id") is not None
 
 

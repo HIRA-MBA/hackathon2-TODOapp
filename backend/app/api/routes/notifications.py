@@ -7,7 +7,7 @@ Per api-extensions.yaml: CRUD operations for notification settings.
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,10 +20,15 @@ router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 class NotificationPreferenceCreate(BaseModel):
     """Request schema for creating/updating notification preferences."""
+
     email_enabled: bool = Field(True, alias="emailEnabled")
     push_enabled: bool = Field(True, alias="pushEnabled")
-    quiet_hours_start: Optional[str] = Field(None, alias="quietHoursStart", description="HH:MM format")
-    quiet_hours_end: Optional[str] = Field(None, alias="quietHoursEnd", description="HH:MM format")
+    quiet_hours_start: Optional[str] = Field(
+        None, alias="quietHoursStart", description="HH:MM format"
+    )
+    quiet_hours_end: Optional[str] = Field(
+        None, alias="quietHoursEnd", description="HH:MM format"
+    )
     timezone: str = "UTC"
 
     class Config:
@@ -32,6 +37,7 @@ class NotificationPreferenceCreate(BaseModel):
 
 class NotificationPreferenceResponse(BaseModel):
     """Response schema for notification preferences."""
+
     id: UUID
     user_id: str = Field(alias="userId")
     email_enabled: bool = Field(alias="emailEnabled")

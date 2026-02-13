@@ -125,7 +125,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     "path": request.url.path,
                     "retry_after": retry_after,
                     "request_id": getattr(request.state, "request_id", None),
-                }
+                },
             )
 
             # Return friendly message per FR-026

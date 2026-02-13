@@ -64,7 +64,9 @@ def format_task_context(tasks: list[Task]) -> str:
     pending_count = sum(1 for t in tasks if not t.completed)
     completed_count = sum(1 for t in tasks if t.completed)
 
-    lines.append(f"Total: {len(tasks)} tasks ({pending_count} pending, {completed_count} completed)")
+    lines.append(
+        f"Total: {len(tasks)} tasks ({pending_count} pending, {completed_count} completed)"
+    )
     lines.append("")
 
     for task in tasks:

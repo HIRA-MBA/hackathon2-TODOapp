@@ -14,7 +14,6 @@ import os
 from typing import Any
 
 import httpx
-from pydantic import BaseModel
 
 from app.models.events import TaskEvent, ReminderEvent
 
@@ -127,7 +126,8 @@ class EventPublisher:
             # Exponential backoff before retry
             if attempt < self.max_retries - 1:
                 import asyncio
-                await asyncio.sleep(2 ** attempt)
+
+                await asyncio.sleep(2**attempt)
 
         # All retries failed - add to fallback queue
         logger.error(
@@ -138,7 +138,9 @@ class EventPublisher:
                 "max_retries": self.max_retries,
             },
         )
-        self._fallback_queue.append({"topic": topic, "data": data, "metadata": metadata})
+        self._fallback_queue.append(
+            {"topic": topic, "data": data, "metadata": metadata}
+        )
         return False
 
     async def publish_task_event(

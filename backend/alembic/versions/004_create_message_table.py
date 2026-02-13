@@ -9,6 +9,7 @@ with timestamps and conversation references.
 
 Message roles: user, assistant, tool (per spec clarification).
 """
+
 from typing import Sequence, Union
 
 from alembic import op

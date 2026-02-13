@@ -66,7 +66,7 @@ def _verify_token(token: str) -> dict:
             options={"verify_exp": True},
         )
         return payload
-    except Exception as jwks_error:
+    except Exception:
         pass  # Fall through to symmetric
 
     # Fallback: Try symmetric HS256 with shared secret
@@ -112,6 +112,7 @@ async def get_current_user(
 
     # Debug: log the payload
     import logging
+
     logging.info(f"JWT payload: {payload}")
 
     user_id = payload.get("sub")

@@ -8,7 +8,7 @@ Per spec FR-012: Scope all operations to authenticated user.
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
@@ -16,8 +16,6 @@ from app.dependencies.auth import CurrentUser
 from app.dependencies.database import get_session
 from app.schemas.chat import (
     ChatRequest,
-    ChatResponse,
-    ChatStreamEvent,
     ClearHistoryResponse,
     ConversationHistoryResponse,
     MessageResponse,

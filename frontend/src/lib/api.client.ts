@@ -26,11 +26,12 @@ class TaskApiClient {
         detail: response.statusText,
       }));
 
-      // Handle specific error codes
+      // On 401, throw an error but do NOT redirect. The middleware and
+      // protected layout handle auth redirects on page navigations. Redirecting
+      // here caused false "session expired" loops when the 401 was from the
+      // backend proxy rather than a truly expired session.
       if (response.status === 401) {
-        // Session expired or invalid
-        window.location.href = "/signin?error=session_expired";
-        throw new Error("Session expired");
+        throw new Error("Authentication required. Please refresh the page.");
       }
 
       throw new Error(error.detail || error.error);

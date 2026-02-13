@@ -30,8 +30,12 @@ class Message(SQLModel, table=True):
     __tablename__ = "message"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    conversation_id: UUID = Field(foreign_key="conversation.id", nullable=False, index=True)
+    conversation_id: UUID = Field(
+        foreign_key="conversation.id", nullable=False, index=True
+    )
     role: str = Field(sa_column=Column(String(20), nullable=False))
     content: str = Field(nullable=False)
-    message_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    message_metadata: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON)
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)

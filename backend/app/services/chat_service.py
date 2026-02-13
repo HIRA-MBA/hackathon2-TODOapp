@@ -16,7 +16,6 @@ import logging
 import time
 import uuid
 from typing import AsyncGenerator
-from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from agents import Runner
@@ -75,14 +74,18 @@ class ChatService:
             extra={
                 "request_id": request_id,
                 "user_id": user_id,
-            }
+            },
         )
 
         try:
             # 1. Get or create conversation
-            yield ChatStreamEvent(type="thinking", content="Understanding your request...")
+            yield ChatStreamEvent(
+                type="thinking", content="Understanding your request..."
+            )
 
-            conversation = await self.conversation_service.get_or_create_conversation(user_id)
+            conversation = await self.conversation_service.get_or_create_conversation(
+                user_id
+            )
             conversation_id = str(conversation.id)
             logger.info(
                 "conversation_loaded",
@@ -90,7 +93,7 @@ class ChatService:
                     "request_id": request_id,
                     "user_id": user_id,
                     "conversation_id": conversation_id,
-                }
+                },
             )
 
             # 2. Load context (recent messages and tasks)
@@ -108,7 +111,7 @@ class ChatService:
                     "user_id": user_id,
                     "message_count": len(recent_messages),
                     "task_count": len(tasks),
-                }
+                },
             )
 
             # 3. Persist user message
@@ -124,7 +127,11 @@ class ChatService:
             # 5. Build conversation history as context string
             history_text = ""
             for msg in recent_messages:
-                role_label = msg.role.upper() if isinstance(msg.role, str) else msg.role.value.upper()
+                role_label = (
+                    msg.role.upper()
+                    if isinstance(msg.role, str)
+                    else msg.role.value.upper()
+                )
                 if role_label in ("USER", "ASSISTANT"):
                     history_text += f"{role_label}: {msg.content}\n"
 
@@ -168,12 +175,14 @@ class ChatService:
 
                 # Extract tool calls from the run
                 for item in result.new_items:
-                    if hasattr(item, 'tool_name') and hasattr(item, 'output'):
+                    if hasattr(item, "tool_name") and hasattr(item, "output"):
                         tool_name = item.tool_name
                         tool_output = str(item.output) if item.output else ""
 
                         # Determine status from output
-                        status = "success" if "success" in tool_output.lower() else "error"
+                        status = (
+                            "success" if "success" in tool_output.lower() else "error"
+                        )
                         if "info" in tool_output.lower():
                             status = "success"
 
@@ -186,7 +195,7 @@ class ChatService:
                                 "user_id": user_id,
                                 "tool": tool_name,
                                 "status": status,
-                            }
+                            },
                         )
 
                         yield ChatStreamEvent(
@@ -202,11 +211,13 @@ class ChatService:
                             result=tool_output,
                         )
 
-                        tool_executions.append(ToolExecution(
-                            tool=tool_name,
-                            status=status,
-                            result=tool_output,
-                        ))
+                        tool_executions.append(
+                            ToolExecution(
+                                tool=tool_name,
+                                status=status,
+                                result=tool_output,
+                            )
+                        )
 
                         # Persist tool result as message
                         await self.conversation_service.create_message(
@@ -270,7 +281,9 @@ class ChatService:
                 )
 
             # 9. Update conversation activity
-            await self.conversation_service.update_conversation_activity(conversation.id)
+            await self.conversation_service.update_conversation_activity(
+                conversation.id
+            )
 
             # 10. Signal completion
             yield ChatStreamEvent(
@@ -288,9 +301,11 @@ class ChatService:
                     "user_id": user_id,
                     "conversation_id": conversation_id,
                     "latency_ms": round(total_latency_ms, 2),
-                    "ai_latency_ms": round(ai_latency_ms, 2) if 'ai_latency_ms' in dir() else None,
+                    "ai_latency_ms": round(ai_latency_ms, 2)
+                    if "ai_latency_ms" in dir()
+                    else None,
                     "tool_calls": tool_call_count,
-                }
+                },
             )
 
         except Exception as e:
@@ -322,7 +337,9 @@ class ChatService:
         Returns:
             Tuple of (conversation_id, list of message dicts).
         """
-        conversation = await self.conversation_service.get_or_create_conversation(user_id)
+        conversation = await self.conversation_service.get_or_create_conversation(
+            user_id
+        )
         messages = await self.conversation_service.get_recent_messages(
             conversation.id, limit=limit
         )
@@ -350,7 +367,9 @@ class ChatService:
         Returns:
             Number of messages deleted.
         """
-        conversation = await self.conversation_service.get_or_create_conversation(user_id)
+        conversation = await self.conversation_service.get_or_create_conversation(
+            user_id
+        )
         deleted_count = await self.conversation_service.clear_messages(conversation.id)
 
         logger.info(
@@ -359,7 +378,7 @@ class ChatService:
                 "user_id": user_id,
                 "conversation_id": str(conversation.id),
                 "messages_deleted": deleted_count,
-            }
+            },
         )
 
         return deleted_count

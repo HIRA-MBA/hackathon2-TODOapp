@@ -12,7 +12,12 @@ import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from app.models.events import ReminderEventType, ReminderEvent, ReminderEventData, create_reminder_event
+from app.models.events import (
+    ReminderEventType,
+    ReminderEvent,
+    ReminderEventData,
+    create_reminder_event,
+)
 from app.services.event_publisher import get_event_publisher
 from app.middleware.correlation import get_correlation_id
 

@@ -10,6 +10,7 @@ Per data-model.md Migration Strategy:
 3. Create notification_preference table
 4. Create processed_event table (idempotency tracking)
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -118,9 +119,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("event_id", "consumer_id"),
     )
-    op.create_index(
-        "idx_processed_event_time", "processed_event", ["processed_at"]
-    )
+    op.create_index("idx_processed_event_time", "processed_event", ["processed_at"])
 
 
 def downgrade() -> None:
@@ -128,7 +127,9 @@ def downgrade() -> None:
     op.drop_index("idx_processed_event_time", table_name="processed_event")
     op.drop_table("processed_event")
 
-    op.drop_index("idx_notification_preference_user", table_name="notification_preference")
+    op.drop_index(
+        "idx_notification_preference_user", table_name="notification_preference"
+    )
     op.drop_table("notification_preference")
 
     op.drop_index("idx_task_recurrence", table_name="task")

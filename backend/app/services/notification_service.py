@@ -3,7 +3,6 @@
 Per T078: Service for managing user notification preferences.
 """
 
-from datetime import time
 from typing import Optional
 from uuid import uuid4
 

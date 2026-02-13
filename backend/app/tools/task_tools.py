@@ -45,7 +45,7 @@ def parse_due_date(date_string: str) -> datetime | None:
         settings={
             "PREFER_DATES_FROM": "future",  # Prefer future dates
             "RELATIVE_BASE": datetime.now(),  # Base for relative dates
-        }
+        },
     )
 
     return parsed
@@ -154,7 +154,9 @@ async def list_tasks(
         today = datetime.now().date()
         for task in tasks:
             status_icon = "[DONE]" if task.completed else "[    ]"
-            priority_icon = {"high": "!", "medium": "-", "low": "."}.get(task.priority, "-")
+            priority_icon = {"high": "!", "medium": "-", "low": "."}.get(
+                task.priority, "-"
+            )
 
             # Format due date
             due_str = ""
@@ -163,11 +165,13 @@ async def list_tasks(
                 if due_date < today and not task.completed:
                     due_str = f" [OVERDUE: {due_date}]"
                 elif due_date == today:
-                    due_str = f" [TODAY]"
+                    due_str = " [TODAY]"
                 else:
                     due_str = f" [due: {due_date}]"
 
-            lines.append(f"  [{priority_icon}] #{task.id} {status_icon} {task.title}{due_str}")
+            lines.append(
+                f"  [{priority_icon}] #{task.id} {status_icon} {task.title}{due_str}"
+            )
 
         return "\n".join(lines)
     except Exception as e:

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 class TaskEventType(str, Enum):
     """Task event types per data-model.md."""
+
     CREATED = "com.todo.task.created"
     UPDATED = "com.todo.task.updated"
     DELETED = "com.todo.task.deleted"
@@ -24,6 +25,7 @@ class TaskEventType(str, Enum):
 
 class ReminderEventType(str, Enum):
     """Reminder event types."""
+
     TRIGGER = "com.todo.reminder.trigger"
     CANCELLED = "com.todo.reminder.cancelled"
 
@@ -33,6 +35,7 @@ class TaskEventData(BaseModel):
 
     Contains a snapshot of the task at event time.
     """
+
     task_id: UUID
     title: str
     description: str | None = None
@@ -51,6 +54,7 @@ class TaskEvent(BaseModel):
     Per CloudEvents spec 1.0:
     https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md
     """
+
     # Required CloudEvents attributes
     specversion: str = Field(default="1.0", description="CloudEvents spec version")
     id: UUID = Field(default_factory=uuid4, description="Event ID (idempotency key)")
@@ -63,10 +67,14 @@ class TaskEvent(BaseModel):
     # Optional CloudEvents attributes
     datacontenttype: str = Field(default="application/json")
     subject: str = Field(description="Subject (e.g., 'tasks/{task_id}')")
-    time: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")
+    time: datetime = Field(
+        default_factory=datetime.utcnow, description="Event timestamp"
+    )
 
     # Extension attributes for distributed tracing
-    correlationid: str | None = Field(default=None, description="Distributed trace correlation ID")
+    correlationid: str | None = Field(
+        default=None, description="Distributed trace correlation ID"
+    )
 
     # Event payload
     data: TaskEventData
@@ -74,11 +82,14 @@ class TaskEvent(BaseModel):
 
 class ReminderEventData(BaseModel):
     """Payload data for reminder events."""
+
     task_id: UUID
     task_title: str
     user_id: str
     due_date: datetime
-    scheduled_time: datetime = Field(description="When reminder was scheduled to trigger")
+    scheduled_time: datetime = Field(
+        description="When reminder was scheduled to trigger"
+    )
     channels: list[str] = Field(
         default_factory=lambda: ["email"],
         description="Notification channels: email, push",
@@ -87,6 +98,7 @@ class ReminderEventData(BaseModel):
 
 class ReminderEvent(BaseModel):
     """CloudEvents envelope for reminder events."""
+
     # Required CloudEvents attributes
     specversion: str = Field(default="1.0")
     id: UUID = Field(default_factory=uuid4)

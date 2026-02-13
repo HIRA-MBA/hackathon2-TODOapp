@@ -27,14 +27,16 @@ def _prepare_async_database_url(url: str) -> tuple[str, dict]:
 
     # Rebuild URL without sslmode
     new_query = urlencode(query_params, doseq=True)
-    clean_url = urlunparse((
-        parsed.scheme,
-        parsed.netloc,
-        parsed.path,
-        parsed.params,
-        new_query,
-        parsed.fragment,
-    ))
+    clean_url = urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            new_query,
+            parsed.fragment,
+        )
+    )
 
     # Configure SSL based on sslmode
     connect_args = {}

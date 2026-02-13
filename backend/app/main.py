@@ -134,6 +134,7 @@ app.add_middleware(
 # Include API routes
 app.include_router(router, prefix="/api")
 
+
 # Root health check endpoint
 @app.get("/")
 async def root():

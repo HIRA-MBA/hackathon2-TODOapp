@@ -58,6 +58,7 @@ async def readiness_check(session: AsyncSession = Depends(get_session)):
     dapr_port = os.environ.get("DAPR_HTTP_PORT", "3500")
     try:
         import httpx
+
         async with httpx.AsyncClient(timeout=2.0) as client:
             response = await client.get(f"http://localhost:{dapr_port}/v1.0/healthz")
             if response.status_code == 204:

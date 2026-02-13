@@ -92,9 +92,7 @@ class TaskService:
                 },
             )
 
-    async def list_tasks(
-        self, user_id: str, sort_by: str = "created_at"
-    ) -> list[Task]:
+    async def list_tasks(self, user_id: str, sort_by: str = "created_at") -> list[Task]:
         """List all tasks for a user with optional sorting.
 
         Args:
@@ -108,7 +106,9 @@ class TaskService:
         )
 
         if sort_by == "due_date":
-            stmt = stmt.order_by(Task.due_date.asc().nulls_last(), Task.created_at.desc())
+            stmt = stmt.order_by(
+                Task.due_date.asc().nulls_last(), Task.created_at.desc()
+            )
         else:
             stmt = stmt.order_by(Task.created_at.desc())
 
@@ -152,7 +152,9 @@ class TaskService:
             completed=False,
             priority=data.priority,
             due_date=data.due_date,
-            reminder_offset=data.reminder_offset if hasattr(data, 'reminder_offset') and data.reminder_offset else 30,
+            reminder_offset=data.reminder_offset
+            if hasattr(data, "reminder_offset") and data.reminder_offset
+            else 30,
             recurrence_id=recurrence_id,
         )
         self.session.add(task)
@@ -186,12 +188,14 @@ class TaskService:
         if data.title is not None:
             values["title"] = data.title.strip()
         if data.description is not None:
-            values["description"] = data.description.strip() if data.description else None
+            values["description"] = (
+                data.description.strip() if data.description else None
+            )
         if data.priority is not None:
             values["priority"] = data.priority
         if data.due_date is not None:
             values["due_date"] = data.due_date
-        if hasattr(data, 'reminder_offset') and data.reminder_offset is not None:
+        if hasattr(data, "reminder_offset") and data.reminder_offset is not None:
             values["reminder_offset"] = data.reminder_offset
 
         stmt = (
@@ -266,7 +270,9 @@ class TaskService:
         """
         stmt = (
             update(Task)
-            .where(Task.id == task_id, Task.user_id == user_id, Task.completed == False)
+            .where(
+                Task.id == task_id, Task.user_id == user_id, Task.completed.is_(False)
+            )
             .values(completed=True, updated_at=datetime.utcnow())
             .returning(Task)
         )
@@ -387,15 +393,14 @@ class TaskService:
         limit: int = 50,
     ) -> list[Task]:
         """Get all instances of a recurring task."""
-        stmt = (
-            select(Task)
-            .where(Task.parent_task_id == parent_task_id, Task.user_id == user_id)
+        stmt = select(Task).where(
+            Task.parent_task_id == parent_task_id, Task.user_id == user_id
         )
 
         if status == "pending":
-            stmt = stmt.where(Task.completed == False)
+            stmt = stmt.where(Task.completed.is_(False))
         elif status == "completed":
-            stmt = stmt.where(Task.completed == True)
+            stmt = stmt.where(Task.completed.is_(True))
 
         stmt = stmt.order_by(Task.created_at.desc()).limit(limit)
 

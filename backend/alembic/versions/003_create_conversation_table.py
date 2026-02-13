@@ -7,6 +7,7 @@ Create Date: 2026-01-04
 Per spec FR-008: System MUST persist all conversations with unique identifiers per user.
 Single conversation per user (MVP), never auto-expires.
 """
+
 from typing import Sequence, Union
 
 from alembic import op

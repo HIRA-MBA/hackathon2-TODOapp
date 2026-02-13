@@ -14,7 +14,6 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch, MagicMock
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.task import Task
 from app.mcp.server import (
     get_user_id,
     current_user_id,
@@ -119,8 +118,8 @@ class TestMCPAddTask:
         """Test: add_task creates task with title only."""
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
                 mock_task = MagicMock()
                 mock_task.id = uuid4()
@@ -140,8 +139,8 @@ class TestMCPAddTask:
         """Test: add_task accepts priority parameter."""
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
                 mock_task = MagicMock()
                 mock_task.id = uuid4()
@@ -162,8 +161,8 @@ class TestMCPAddTask:
 
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
                 mock_task = MagicMock()
                 mock_task.id = uuid4()
@@ -173,8 +172,7 @@ class TestMCPAddTask:
                 mock_service.create_task = AsyncMock(return_value=mock_task)
 
                 result = await _add_task_impl(
-                    title="Task with deadline",
-                    due_date=due.strftime("%Y-%m-%d")
+                    title="Task with deadline", due_date=due.strftime("%Y-%m-%d")
                 )
 
                 assert "success" in result
@@ -217,25 +215,27 @@ class TestMCPListTasks:
         """Test: list_tasks shows priority indicators (!, -, .)."""
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
-                mock_service.list_tasks = AsyncMock(return_value=[
-                    MagicMock(
-                        id=uuid4(),
-                        title="High priority",
-                        completed=False,
-                        priority="high",
-                        due_date=None,
-                    ),
-                    MagicMock(
-                        id=uuid4(),
-                        title="Low priority",
-                        completed=False,
-                        priority="low",
-                        due_date=None,
-                    ),
-                ])
+                mock_service.list_tasks = AsyncMock(
+                    return_value=[
+                        MagicMock(
+                            id=uuid4(),
+                            title="High priority",
+                            completed=False,
+                            priority="high",
+                            due_date=None,
+                        ),
+                        MagicMock(
+                            id=uuid4(),
+                            title="Low priority",
+                            completed=False,
+                            priority="low",
+                            due_date=None,
+                        ),
+                    ]
+                )
 
                 result = await _list_tasks_impl()
 
@@ -249,18 +249,20 @@ class TestMCPListTasks:
 
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
-                mock_service.list_tasks = AsyncMock(return_value=[
-                    MagicMock(
-                        id=uuid4(),
-                        title="Overdue task",
-                        completed=False,
-                        priority="medium",
-                        due_date=yesterday,
-                    ),
-                ])
+                mock_service.list_tasks = AsyncMock(
+                    return_value=[
+                        MagicMock(
+                            id=uuid4(),
+                            title="Overdue task",
+                            completed=False,
+                            priority="medium",
+                            due_date=yesterday,
+                        ),
+                    ]
+                )
 
                 result = await _list_tasks_impl()
 
@@ -273,18 +275,20 @@ class TestMCPListTasks:
 
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
-                mock_service.list_tasks = AsyncMock(return_value=[
-                    MagicMock(
-                        id=uuid4(),
-                        title="Due today",
-                        completed=False,
-                        priority="medium",
-                        due_date=today,
-                    ),
-                ])
+                mock_service.list_tasks = AsyncMock(
+                    return_value=[
+                        MagicMock(
+                            id=uuid4(),
+                            title="Due today",
+                            completed=False,
+                            priority="medium",
+                            due_date=today,
+                        ),
+                    ]
+                )
 
                 result = await _list_tasks_impl()
 
@@ -295,25 +299,27 @@ class TestMCPListTasks:
         """Test: list_tasks filters by pending/completed status."""
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
-                mock_service.list_tasks = AsyncMock(return_value=[
-                    MagicMock(
-                        id=uuid4(),
-                        title="Pending task",
-                        completed=False,
-                        priority="medium",
-                        due_date=None,
-                    ),
-                    MagicMock(
-                        id=uuid4(),
-                        title="Completed task",
-                        completed=True,
-                        priority="medium",
-                        due_date=None,
-                    ),
-                ])
+                mock_service.list_tasks = AsyncMock(
+                    return_value=[
+                        MagicMock(
+                            id=uuid4(),
+                            title="Pending task",
+                            completed=False,
+                            priority="medium",
+                            due_date=None,
+                        ),
+                        MagicMock(
+                            id=uuid4(),
+                            title="Completed task",
+                            completed=True,
+                            priority="medium",
+                            due_date=None,
+                        ),
+                    ]
+                )
 
                 # Filter pending only
                 result = await _list_tasks_impl(status="pending")
@@ -325,25 +331,27 @@ class TestMCPListTasks:
         """Test: list_tasks filters by search term."""
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
-                mock_service.list_tasks = AsyncMock(return_value=[
-                    MagicMock(
-                        id=uuid4(),
-                        title="Buy groceries",
-                        completed=False,
-                        priority="medium",
-                        due_date=None,
-                    ),
-                    MagicMock(
-                        id=uuid4(),
-                        title="Call mom",
-                        completed=False,
-                        priority="medium",
-                        due_date=None,
-                    ),
-                ])
+                mock_service.list_tasks = AsyncMock(
+                    return_value=[
+                        MagicMock(
+                            id=uuid4(),
+                            title="Buy groceries",
+                            completed=False,
+                            priority="medium",
+                            due_date=None,
+                        ),
+                        MagicMock(
+                            id=uuid4(),
+                            title="Call mom",
+                            completed=False,
+                            priority="medium",
+                            due_date=None,
+                        ),
+                    ]
+                )
 
                 result = await _list_tasks_impl(search="groceries")
                 assert "Buy groceries" in result
@@ -354,8 +362,8 @@ class TestMCPListTasks:
         """Test: list_tasks passes sort_by parameter to service."""
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
                 mock_service.list_tasks = AsyncMock(return_value=[])
 
@@ -376,8 +384,8 @@ class TestMCPUpdateTask:
 
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
                 mock_task = MagicMock()
                 mock_task.id = task_id
@@ -386,8 +394,7 @@ class TestMCPUpdateTask:
                 mock_service.update_task = AsyncMock(return_value=mock_task)
 
                 result = await _update_task_impl(
-                    task_id=str(task_id),
-                    title="New title"
+                    task_id=str(task_id), title="New title"
                 )
 
                 assert "success" in result
@@ -400,8 +407,8 @@ class TestMCPUpdateTask:
 
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
                 mock_task = MagicMock()
                 mock_task.id = task_id
@@ -409,10 +416,7 @@ class TestMCPUpdateTask:
                 mock_service.get_task = AsyncMock(return_value=mock_task)
                 mock_service.update_task = AsyncMock(return_value=mock_task)
 
-                result = await _update_task_impl(
-                    task_id=str(task_id),
-                    priority="high"
-                )
+                result = await _update_task_impl(task_id=str(task_id), priority="high")
 
                 assert "success" in result
 
@@ -426,10 +430,7 @@ class TestMCPUpdateTask:
     @pytest.mark.asyncio
     async def test_update_task_validates_priority(self, auth_context):
         """Test: update_task rejects invalid priority values."""
-        result = await _update_task_impl(
-            task_id=str(uuid4()),
-            priority="invalid"
-        )
+        result = await _update_task_impl(task_id=str(uuid4()), priority="invalid")
         assert "error" in result
         assert "priority must be" in result
 
@@ -447,14 +448,13 @@ class TestMCPUpdateTask:
 
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
                 mock_service.get_task = AsyncMock(return_value=None)
 
                 result = await _update_task_impl(
-                    task_id=str(task_id),
-                    title="New title"
+                    task_id=str(task_id), title="New title"
                 )
 
                 assert "error" in result
@@ -471,8 +471,8 @@ class TestMCPCompleteTask:
 
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
                 pending_task = MagicMock()
                 pending_task.id = task_id
@@ -496,8 +496,8 @@ class TestMCPCompleteTask:
 
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
                 completed_task = MagicMock()
                 completed_task.id = task_id
@@ -521,8 +521,8 @@ class TestMCPDeleteTask:
 
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
                 mock_task = MagicMock()
                 mock_task.id = task_id
@@ -542,8 +542,8 @@ class TestMCPDeleteTask:
 
         mock_get_session, mock_session = create_mock_session_context()
 
-        with patch('app.mcp.server.get_session', mock_get_session):
-            with patch('app.mcp.server.TaskService') as MockTaskService:
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
                 mock_service = MockTaskService.return_value
                 mock_service.get_task = AsyncMock(return_value=None)
 
@@ -562,11 +562,11 @@ class TestMCPToolParity:
         import asyncio
 
         # Verify all _impl functions are defined and are async
-        assert hasattr(server, '_add_task_impl')
-        assert hasattr(server, '_list_tasks_impl')
-        assert hasattr(server, '_update_task_impl')
-        assert hasattr(server, '_complete_task_impl')
-        assert hasattr(server, '_delete_task_impl')
+        assert hasattr(server, "_add_task_impl")
+        assert hasattr(server, "_list_tasks_impl")
+        assert hasattr(server, "_update_task_impl")
+        assert hasattr(server, "_complete_task_impl")
+        assert hasattr(server, "_delete_task_impl")
 
         # Verify they are async functions
         assert asyncio.iscoroutinefunction(server._add_task_impl)
@@ -582,8 +582,8 @@ class TestMCPToolParity:
         sig = inspect.signature(_add_task_impl)
         params = list(sig.parameters.keys())
 
-        assert 'priority' in params
-        assert sig.parameters['priority'].default == 'medium'
+        assert "priority" in params
+        assert sig.parameters["priority"].default == "medium"
 
     def test_add_task_has_due_date_parameter(self):
         """Test: add_task supports due_date parameter like task_tools.py."""
@@ -592,8 +592,8 @@ class TestMCPToolParity:
         sig = inspect.signature(_add_task_impl)
         params = list(sig.parameters.keys())
 
-        assert 'due_date' in params
-        assert sig.parameters['due_date'].default is None
+        assert "due_date" in params
+        assert sig.parameters["due_date"].default is None
 
     def test_list_tasks_has_sort_by_parameter(self):
         """Test: list_tasks supports sort_by parameter like task_tools.py."""
@@ -602,8 +602,8 @@ class TestMCPToolParity:
         sig = inspect.signature(_list_tasks_impl)
         params = list(sig.parameters.keys())
 
-        assert 'sort_by' in params
-        assert sig.parameters['sort_by'].default == 'created_at'
+        assert "sort_by" in params
+        assert sig.parameters["sort_by"].default == "created_at"
 
     def test_list_tasks_has_search_parameter(self):
         """Test: list_tasks supports search parameter like task_tools.py."""
@@ -612,7 +612,7 @@ class TestMCPToolParity:
         sig = inspect.signature(_list_tasks_impl)
         params = list(sig.parameters.keys())
 
-        assert 'search' in params
+        assert "search" in params
 
     def test_update_task_has_all_parameters(self):
         """Test: update_task supports all update fields like task_tools.py."""
@@ -621,8 +621,8 @@ class TestMCPToolParity:
         sig = inspect.signature(_update_task_impl)
         params = list(sig.parameters.keys())
 
-        assert 'task_id' in params
-        assert 'title' in params
-        assert 'description' in params
-        assert 'priority' in params
-        assert 'due_date' in params
+        assert "task_id" in params
+        assert "title" in params
+        assert "description" in params
+        assert "priority" in params
+        assert "due_date" in params

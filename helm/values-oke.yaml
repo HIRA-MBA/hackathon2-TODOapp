@@ -214,6 +214,15 @@ ingress:
         - path: /api/auth
           pathType: Prefix
           service: frontend
+        - path: /api/tasks
+          pathType: Prefix
+          service: frontend
+        - path: /api/chat
+          pathType: Prefix
+          service: frontend
+        - path: /api/chatkit
+          pathType: Prefix
+          service: frontend
         - path: /api
           pathType: Prefix
           service: backend

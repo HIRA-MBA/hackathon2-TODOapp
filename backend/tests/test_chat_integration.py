@@ -6,16 +6,14 @@ Tests the complete chat flow from endpoint to database.
 
 import pytest
 from uuid import uuid4
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import app
-from app.models.task import Task
 from app.models.conversation import Conversation
-from app.models.message import Message, MessageRole
+from app.models.message import Message
 from app.services.conversation_service import ConversationService
-from app.services.task_service import TaskService
 
 
 # Test user for mocking authentication
@@ -48,13 +46,9 @@ class TestChatEndpoint:
         Per spec FR-011: System MUST require valid JWT authentication.
         """
         async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
-            response = await client.post(
-                "/api/chat",
-                json={"message": "Hello"}
-            )
+            response = await client.post("/api/chat", json={"message": "Hello"})
             # Should fail with 401 or 403 without auth
             assert response.status_code in [401, 403, 422]
 
@@ -66,13 +60,9 @@ class TestChatEndpoint:
         """
         long_message = "x" * 2001
         async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
-            response = await client.post(
-                "/api/chat",
-                json={"message": long_message}
-            )
+            response = await client.post("/api/chat", json={"message": long_message})
             # Should reject with validation error (after auth check)
             assert response.status_code in [401, 403, 422]
 
@@ -83,13 +73,9 @@ class TestChatEndpoint:
         Per spec edge case: System responds asking for input.
         """
         async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
-            response = await client.post(
-                "/api/chat",
-                json={"message": ""}
-            )
+            response = await client.post("/api/chat", json={"message": ""})
             # Should reject with validation error
             assert response.status_code in [401, 403, 422]
 
@@ -111,7 +97,7 @@ class TestConversationService:
         mock_db_session.execute.return_value = mock_result
 
         # Should create new conversation
-        conversation = await service.get_or_create_conversation(TEST_USER_ID)
+        _conversation = await service.get_or_create_conversation(TEST_USER_ID)
 
         # Verify add and flush were called (service uses flush, not commit)
         assert mock_db_session.add.called
@@ -150,13 +136,32 @@ class TestConversationService:
 
         # Mock messages in DESCENDING order (as returned by the query)
         from datetime import datetime, timedelta
+
         now = datetime.utcnow()
 
         # Messages returned in descending order by created_at (newest first)
         messages = [
-            Message(id=uuid4(), conversation_id=conv_id, role="user", content="Third", created_at=now),
-            Message(id=uuid4(), conversation_id=conv_id, role="assistant", content="Second", created_at=now - timedelta(minutes=1)),
-            Message(id=uuid4(), conversation_id=conv_id, role="user", content="First", created_at=now - timedelta(minutes=2)),
+            Message(
+                id=uuid4(),
+                conversation_id=conv_id,
+                role="user",
+                content="Third",
+                created_at=now,
+            ),
+            Message(
+                id=uuid4(),
+                conversation_id=conv_id,
+                role="assistant",
+                content="Second",
+                created_at=now - timedelta(minutes=1),
+            ),
+            Message(
+                id=uuid4(),
+                conversation_id=conv_id,
+                role="user",
+                content="First",
+                created_at=now - timedelta(minutes=2),
+            ),
         ]
 
         mock_result = MagicMock()

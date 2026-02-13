@@ -6,6 +6,7 @@ Create Date: 2026-01-18
 
 Add priority (high/medium/low) and due_date fields to tasks.
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -21,7 +22,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.add_column(
         "task",
-        sa.Column("priority", sa.String(length=10), nullable=False, server_default="medium"),
+        sa.Column(
+            "priority", sa.String(length=10), nullable=False, server_default="medium"
+        ),
     )
     op.add_column(
         "task",

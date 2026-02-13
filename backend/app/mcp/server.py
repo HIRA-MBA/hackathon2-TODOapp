@@ -86,6 +86,7 @@ class AuthMiddleware:
         user_id_param = ""
         if query_string:
             from urllib.parse import parse_qs
+
             params = parse_qs(query_string)
             user_id_param = params.get("user_id", [""])[0]
 
@@ -97,7 +98,9 @@ class AuthMiddleware:
                 # API key auth - trust X-User-ID header or query param
                 if user_id_header:
                     user_id = user_id_header
-                    logger.info(f"MCP auth: API key + X-User-ID header for user {user_id}")
+                    logger.info(
+                        f"MCP auth: API key + X-User-ID header for user {user_id}"
+                    )
                 elif user_id_param:
                     user_id = user_id_param
                     logger.info(f"MCP auth: API key + user_id param for user {user_id}")
@@ -127,7 +130,9 @@ def get_user_id() -> str:
     if not user_id:
         # Fallback to default user for testing
         if settings.mcp_default_user_id:
-            logger.warning(f"MCP: Using default user_id for testing: {settings.mcp_default_user_id}")
+            logger.warning(
+                f"MCP: Using default user_id for testing: {settings.mcp_default_user_id}"
+            )
             return settings.mcp_default_user_id
         raise ValueError("Authentication required")
     return user_id
@@ -148,11 +153,15 @@ async def get_session():
 async def get_active_session_for_user(user_id: str) -> bool:
     """Check if user has an active ChatKit session."""
     async with get_session() as session:
-        stmt = select(ChatkitSession).where(
-            ChatkitSession.user_id == user_id,
-            ChatkitSession.revoked == False,
-            ChatkitSession.expires_at > datetime.utcnow(),
-        ).limit(1)
+        stmt = (
+            select(ChatkitSession)
+            .where(
+                ChatkitSession.user_id == user_id,
+                ChatkitSession.revoked.is_(False),
+                ChatkitSession.expires_at > datetime.utcnow(),
+            )
+            .limit(1)
+        )
         result = await session.execute(stmt)
         return result.scalar_one_or_none() is not None
 
@@ -160,6 +169,7 @@ async def get_active_session_for_user(user_id: str) -> bool:
 # ============================================================================
 # MCP Tools - Simple signatures for OpenAI integration
 # ============================================================================
+
 
 @mcp.tool
 async def add_task(
@@ -258,19 +268,23 @@ async def list_tasks(
 
         for t in tasks:
             status = "DONE" if t.completed else "TODO"
-            priority_marker = {"high": "!", "medium": "", "low": "."}.get(t.priority, "")
+            priority_marker = {"high": "!", "medium": "", "low": "."}.get(
+                t.priority, ""
+            )
 
             due_str = ""
             if t.due_date:
                 task_due = t.due_date.date()
                 if task_due < today and not t.completed:
-                    due_str = f" [OVERDUE]"
+                    due_str = " [OVERDUE]"
                 elif task_due == today:
                     due_str = " [TODAY]"
                 else:
                     due_str = f" [due: {task_due}]"
 
-            lines.append(f"  {priority_marker}[{status}] {t.title}{due_str} (ID: {t.id})")
+            lines.append(
+                f"  {priority_marker}[{status}] {t.title}{due_str} (ID: {t.id})"
+            )
 
         return "\n".join(lines)
 
@@ -290,14 +304,14 @@ async def complete_task(task_id: str) -> str:
     try:
         uuid = UUID(task_id)
     except ValueError:
-        return f"Error: Invalid task ID format."
+        return "Error: Invalid task ID format."
 
     async with get_session() as session:
         service = TaskService(session)
         task = await service.get_task(uuid, user_id)
 
         if not task:
-            return f"Error: Task not found."
+            return "Error: Task not found."
 
         if task.completed:
             return f"Task '{task.title}' is already completed."
@@ -323,14 +337,14 @@ async def delete_task(task_id: str) -> str:
     try:
         uuid = UUID(task_id)
     except ValueError:
-        return f"Error: Invalid task ID format."
+        return "Error: Invalid task ID format."
 
     async with get_session() as session:
         service = TaskService(session)
         task = await service.get_task(uuid, user_id)
 
         if not task:
-            return f"Error: Task not found."
+            return "Error: Task not found."
 
         task_title = task.title
         deleted = await service.delete_task(uuid, user_id)
@@ -365,28 +379,28 @@ async def update_task(
     try:
         uuid = UUID(task_id)
     except ValueError:
-        return f"Error: Invalid task ID format."
+        return "Error: Invalid task ID format."
 
     # Check at least one field to update
     if not any([title, description, priority, due_date]):
         return "Error: Please specify at least one field to update."
 
     if priority and priority not in ("high", "medium", "low"):
-        return f"Error: Priority must be high, medium, or low."
+        return "Error: Priority must be high, medium, or low."
 
     parsed_due_date = None
     if due_date:
         try:
             parsed_due_date = datetime.fromisoformat(due_date.replace("Z", "+00:00"))
         except ValueError:
-            return f"Error: Invalid date format. Use YYYY-MM-DD."
+            return "Error: Invalid date format. Use YYYY-MM-DD."
 
     async with get_session() as session:
         service = TaskService(session)
 
         existing = await service.get_task(uuid, user_id)
         if not existing:
-            return f"Error: Task not found."
+            return "Error: Task not found."
 
         update_data = TaskUpdate(
             title=title if title else None,

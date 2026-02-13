@@ -60,7 +60,7 @@ class ChatkitSessionService:
         """
         stmt = select(ChatkitSession).where(
             ChatkitSession.token == token,
-            ChatkitSession.revoked == False,
+            ChatkitSession.revoked.is_(False),
             ChatkitSession.expires_at > datetime.utcnow(),
         )
         result = await self.session.execute(stmt)
@@ -100,7 +100,7 @@ class ChatkitSessionService:
         """
         stmt = select(ChatkitSession).where(
             ChatkitSession.user_id == user_id,
-            ChatkitSession.revoked == False,
+            ChatkitSession.revoked.is_(False),
         )
         result = await self.session.execute(stmt)
         sessions = result.scalars().all()
@@ -122,7 +122,7 @@ class ChatkitSessionService:
         """
         stmt = delete(ChatkitSession).where(
             (ChatkitSession.expires_at < datetime.utcnow())
-            | (ChatkitSession.revoked == True)
+            | (ChatkitSession.revoked.is_(True))
         )
         result = await self.session.execute(stmt)
         return result.rowcount

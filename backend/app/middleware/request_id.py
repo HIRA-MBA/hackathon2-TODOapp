@@ -50,7 +50,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
                 "method": request.method,
                 "path": request.url.path,
                 "client_host": request.client.host if request.client else "unknown",
-            }
+            },
         )
 
         try:
@@ -72,7 +72,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
                     "path": request.url.path,
                     "status_code": response.status_code,
                     "latency_ms": round(latency_ms, 2),
-                }
+                },
             )
 
             return response

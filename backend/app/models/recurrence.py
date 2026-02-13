@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 class RecurrenceFrequency(str, Enum):
     """Recurrence frequency options."""
+
     DAILY = "daily"
     WEEKLY = "weekly"
     MONTHLY = "monthly"
