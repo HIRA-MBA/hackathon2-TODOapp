@@ -52,21 +52,29 @@ def _prepare_async_database_url(url: str) -> tuple[str, dict]:
     return clean_url, connect_args
 
 
-# Prepare URL and SSL config for asyncpg
-_database_url, _connect_args = _prepare_async_database_url(settings.database_url)
-
-# Ensure the database URL uses the asyncpg driver
-if not _database_url.startswith("postgresql+asyncpg://"):
-    _database_url = _database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-
-# Create async engine for Neon PostgreSQL# Using NullPool since Neon handles connection pooling on their end (transaction pooling)
-# This is the recommended approach for serverless PostgreSQL providers
-engine = create_async_engine(
-    _database_url,
-    poolclass=NullPool,  # Let Neon handle pooling
-    connect_args=_connect_args,
-    echo=settings.environment == "development",
-)
+# Prepare URL and engine config based on database type
+if settings.database_url.startswith("sqlite"):
+    # SQLite (used for testing) - no URL preparation or NullPool needed
+    _database_url = settings.database_url
+    _connect_args = {}
+    engine = create_async_engine(
+        _database_url,
+        connect_args=_connect_args,
+        echo=settings.environment == "development",
+    )
+else:
+    # PostgreSQL - prepare URL for asyncpg and use NullPool
+    _database_url, _connect_args = _prepare_async_database_url(settings.database_url)
+    if not _database_url.startswith("postgresql+asyncpg://"):
+        _database_url = _database_url.replace(
+            "postgresql://", "postgresql+asyncpg://", 1
+        )
+    engine = create_async_engine(
+        _database_url,
+        poolclass=NullPool,  # Let Neon handle pooling
+        connect_args=_connect_args,
+        echo=settings.environment == "development",
+    )
 
 # Create async session factory
 async_session_maker = sessionmaker(
