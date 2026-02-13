@@ -72,7 +72,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
 function ExamplePrompt({ text }: { text: string }) {
   return (
     <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-600">
-      "{text}"
+      &ldquo;{text}&rdquo;
     </div>
   );
 }

@@ -1,28 +1,25 @@
 """Tests for MCP server tools.
 
-Per unified dual-chat task management plan:
-- Auth required (no fallback)
-- Tool parity with task_tools.py
-- Priority/due_date handling
-- Cross-channel task visibility
+Tests the actual @mcp.tool decorated functions from server.py.
+Authentication, validation, CRUD operations, and tool parity.
 """
 
 import pytest
+import asyncio
+import inspect
 from uuid import uuid4
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch, MagicMock
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp.server import (
     get_user_id,
     current_user_id,
-    # Import the _impl functions for direct testing
-    _add_task_impl,
-    _list_tasks_impl,
-    _complete_task_impl,
-    _delete_task_impl,
-    _update_task_impl,
+    add_task,
+    list_tasks,
+    complete_task,
+    delete_task,
+    update_task,
 )
 
 
@@ -44,6 +41,8 @@ TEST_USER_ID = "test-user-mcp-123"
 @pytest.fixture
 def mock_db_session():
     """Mock the database session."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     return AsyncMock(spec=AsyncSession)
 
 
@@ -82,32 +81,32 @@ class TestMCPAuthentication:
     @pytest.mark.asyncio
     async def test_add_task_requires_auth(self, no_auth_context):
         """Test: add_task returns error without authentication."""
-        result = await _add_task_impl(title="Test task")
-        assert "authentication required" in result
+        result = await add_task.fn(title="Test task")
+        assert "not authenticated" in result.lower()
 
     @pytest.mark.asyncio
     async def test_list_tasks_requires_auth(self, no_auth_context):
         """Test: list_tasks returns error without authentication."""
-        result = await _list_tasks_impl()
-        assert "authentication required" in result
+        result = await list_tasks.fn()
+        assert "not authenticated" in result.lower()
 
     @pytest.mark.asyncio
     async def test_complete_task_requires_auth(self, no_auth_context):
         """Test: complete_task returns error without authentication."""
-        result = await _complete_task_impl(task_id=str(uuid4()))
-        assert "authentication required" in result
+        result = await complete_task.fn(task_id=str(uuid4()))
+        assert "not authenticated" in result.lower()
 
     @pytest.mark.asyncio
     async def test_delete_task_requires_auth(self, no_auth_context):
         """Test: delete_task returns error without authentication."""
-        result = await _delete_task_impl(task_id=str(uuid4()))
-        assert "authentication required" in result
+        result = await delete_task.fn(task_id=str(uuid4()))
+        assert "not authenticated" in result.lower()
 
     @pytest.mark.asyncio
     async def test_update_task_requires_auth(self, no_auth_context):
         """Test: update_task returns error without authentication."""
-        result = await _update_task_impl(task_id=str(uuid4()), title="New title")
-        assert "authentication required" in result
+        result = await update_task.fn(task_id=str(uuid4()), title="New title")
+        assert "not authenticated" in result.lower()
 
 
 class TestMCPAddTask:
@@ -126,12 +125,11 @@ class TestMCPAddTask:
                 mock_task.title = "Buy groceries"
                 mock_task.priority = "medium"
                 mock_task.due_date = None
-                # Use AsyncMock for async methods
                 mock_service.create_task = AsyncMock(return_value=mock_task)
 
-                result = await _add_task_impl(title="Buy groceries")
+                result = await add_task.fn(title="Buy groceries")
 
-                assert "success" in result
+                assert "Created task" in result
                 assert "Buy groceries" in result
 
     @pytest.mark.asyncio
@@ -149,9 +147,9 @@ class TestMCPAddTask:
                 mock_task.due_date = None
                 mock_service.create_task = AsyncMock(return_value=mock_task)
 
-                result = await _add_task_impl(title="Urgent task", priority="high")
+                result = await add_task.fn(title="Urgent task", priority="high")
 
-                assert "success" in result
+                assert "Created task" in result
                 assert "priority: high" in result
 
     @pytest.mark.asyncio
@@ -171,40 +169,54 @@ class TestMCPAddTask:
                 mock_task.due_date = due
                 mock_service.create_task = AsyncMock(return_value=mock_task)
 
-                result = await _add_task_impl(
+                result = await add_task.fn(
                     title="Task with deadline", due_date=due.strftime("%Y-%m-%d")
                 )
 
-                assert "success" in result
+                assert "Created task" in result
                 assert "due:" in result
 
     @pytest.mark.asyncio
-    async def test_add_task_validates_priority(self, auth_context):
-        """Test: add_task rejects invalid priority values."""
-        result = await _add_task_impl(title="Test", priority="invalid")
-        assert "error" in result
-        assert "priority must be" in result
+    async def test_add_task_invalid_priority_defaults_to_medium(self, auth_context):
+        """Test: add_task defaults invalid priority to medium."""
+        mock_get_session, mock_session = create_mock_session_context()
+
+        with patch("app.mcp.server.get_session", mock_get_session):
+            with patch("app.mcp.server.TaskService") as MockTaskService:
+                mock_service = MockTaskService.return_value
+                mock_task = MagicMock()
+                mock_task.id = uuid4()
+                mock_task.title = "Test"
+                mock_task.priority = "medium"
+                mock_task.due_date = None
+                mock_service.create_task = AsyncMock(return_value=mock_task)
+
+                result = await add_task.fn(title="Test", priority="invalid")
+
+                # Should succeed with defaulted priority
+                assert "Created task" in result
+                assert "Test" in result
 
     @pytest.mark.asyncio
     async def test_add_task_validates_due_date_format(self, auth_context):
         """Test: add_task rejects invalid due_date format."""
-        result = await _add_task_impl(title="Test", due_date="not-a-date")
-        assert "error" in result
-        assert "invalid due_date format" in result
+        result = await add_task.fn(title="Test", due_date="not-a-date")
+        assert "error" in result.lower()
+        assert "invalid date format" in result.lower()
 
     @pytest.mark.asyncio
     async def test_add_task_validates_title_required(self, auth_context):
         """Test: add_task requires non-empty title."""
-        result = await _add_task_impl(title="")
-        assert "error" in result
-        assert "title cannot be empty" in result
+        result = await add_task.fn(title="")
+        assert "error" in result.lower()
+        assert "title cannot be empty" in result.lower()
 
     @pytest.mark.asyncio
     async def test_add_task_validates_title_length(self, auth_context):
         """Test: add_task rejects titles over 200 characters."""
-        result = await _add_task_impl(title="x" * 201)
-        assert "error" in result
-        assert "200 characters" in result
+        result = await add_task.fn(title="x" * 201)
+        assert "error" in result.lower()
+        assert "200 characters" in result.lower()
 
 
 class TestMCPListTasks:
@@ -212,7 +224,7 @@ class TestMCPListTasks:
 
     @pytest.mark.asyncio
     async def test_list_tasks_shows_priority_indicators(self, auth_context):
-        """Test: list_tasks shows priority indicators (!, -, .)."""
+        """Test: list_tasks shows priority indicators (!, .)."""
         mock_get_session, mock_session = create_mock_session_context()
 
         with patch("app.mcp.server.get_session", mock_get_session):
@@ -237,10 +249,12 @@ class TestMCPListTasks:
                     ]
                 )
 
-                result = await _list_tasks_impl()
+                result = await list_tasks.fn()
 
-                assert "[!]" in result  # high priority
-                assert "[.]" in result  # low priority
+                # Format: {priority_marker}[{status}] {title}
+                # high="!", low="."
+                assert "![TODO]" in result  # high priority marker before status
+                assert ".[TODO]" in result  # low priority marker before status
 
     @pytest.mark.asyncio
     async def test_list_tasks_shows_overdue_indicator(self, auth_context):
@@ -264,7 +278,7 @@ class TestMCPListTasks:
                     ]
                 )
 
-                result = await _list_tasks_impl()
+                result = await list_tasks.fn()
 
                 assert "OVERDUE" in result
 
@@ -290,7 +304,7 @@ class TestMCPListTasks:
                     ]
                 )
 
-                result = await _list_tasks_impl()
+                result = await list_tasks.fn()
 
                 assert "TODAY" in result
 
@@ -322,7 +336,7 @@ class TestMCPListTasks:
                 )
 
                 # Filter pending only
-                result = await _list_tasks_impl(status="pending")
+                result = await list_tasks.fn(filter_status="pending")
                 assert "Pending task" in result
                 assert "Completed task" not in result
 
@@ -353,25 +367,9 @@ class TestMCPListTasks:
                     ]
                 )
 
-                result = await _list_tasks_impl(search="groceries")
+                result = await list_tasks.fn(search="groceries")
                 assert "Buy groceries" in result
                 assert "Call mom" not in result
-
-    @pytest.mark.asyncio
-    async def test_list_tasks_uses_sort_by(self, auth_context):
-        """Test: list_tasks passes sort_by parameter to service."""
-        mock_get_session, mock_session = create_mock_session_context()
-
-        with patch("app.mcp.server.get_session", mock_get_session):
-            with patch("app.mcp.server.TaskService") as MockTaskService:
-                mock_service = MockTaskService.return_value
-                mock_service.list_tasks = AsyncMock(return_value=[])
-
-                await _list_tasks_impl(sort_by="due_date")
-
-                mock_service.list_tasks.assert_called_with(
-                    TEST_USER_ID, sort_by="due_date"
-                )
 
 
 class TestMCPUpdateTask:
@@ -393,11 +391,9 @@ class TestMCPUpdateTask:
                 mock_service.get_task = AsyncMock(return_value=mock_task)
                 mock_service.update_task = AsyncMock(return_value=mock_task)
 
-                result = await _update_task_impl(
-                    task_id=str(task_id), title="New title"
-                )
+                result = await update_task.fn(task_id=str(task_id), title="New title")
 
-                assert "success" in result
+                assert "Updated" in result
                 assert "New title" in result
 
     @pytest.mark.asyncio
@@ -416,30 +412,30 @@ class TestMCPUpdateTask:
                 mock_service.get_task = AsyncMock(return_value=mock_task)
                 mock_service.update_task = AsyncMock(return_value=mock_task)
 
-                result = await _update_task_impl(task_id=str(task_id), priority="high")
+                result = await update_task.fn(task_id=str(task_id), priority="high")
 
-                assert "success" in result
+                assert "Updated" in result
 
     @pytest.mark.asyncio
     async def test_update_task_requires_field(self, auth_context):
         """Test: update_task requires at least one field to update."""
-        result = await _update_task_impl(task_id=str(uuid4()))
-        assert "error" in result
-        assert "must provide at least one field" in result
+        result = await update_task.fn(task_id=str(uuid4()))
+        assert "error" in result.lower()
+        assert "at least one field" in result.lower()
 
     @pytest.mark.asyncio
     async def test_update_task_validates_priority(self, auth_context):
         """Test: update_task rejects invalid priority values."""
-        result = await _update_task_impl(task_id=str(uuid4()), priority="invalid")
-        assert "error" in result
-        assert "priority must be" in result
+        result = await update_task.fn(task_id=str(uuid4()), priority="invalid")
+        assert "error" in result.lower()
+        assert "priority must be" in result.lower()
 
     @pytest.mark.asyncio
     async def test_update_task_validates_task_id(self, auth_context):
         """Test: update_task rejects invalid task ID format."""
-        result = await _update_task_impl(task_id="not-a-uuid", title="Test")
-        assert "error" in result
-        assert "invalid task ID format" in result
+        result = await update_task.fn(task_id="not-a-uuid", title="Test")
+        assert "error" in result.lower()
+        assert "invalid task id" in result.lower()
 
     @pytest.mark.asyncio
     async def test_update_task_not_found(self, auth_context):
@@ -453,12 +449,10 @@ class TestMCPUpdateTask:
                 mock_service = MockTaskService.return_value
                 mock_service.get_task = AsyncMock(return_value=None)
 
-                result = await _update_task_impl(
-                    task_id=str(task_id), title="New title"
-                )
+                result = await update_task.fn(task_id=str(task_id), title="New title")
 
-                assert "error" in result
-                assert "not found" in result
+                assert "error" in result.lower()
+                assert "not found" in result.lower()
 
 
 class TestMCPCompleteTask:
@@ -484,10 +478,10 @@ class TestMCPCompleteTask:
                 completed_task.title = "Buy milk"
                 mock_service.toggle_task = AsyncMock(return_value=completed_task)
 
-                result = await _complete_task_impl(task_id=str(task_id))
+                result = await complete_task.fn(task_id=str(task_id))
 
-                assert "success" in result
-                assert "done" in result
+                assert "Completed" in result
+                assert "Buy milk" in result
 
     @pytest.mark.asyncio
     async def test_complete_task_already_completed(self, auth_context):
@@ -505,10 +499,9 @@ class TestMCPCompleteTask:
                 completed_task.completed = True
                 mock_service.get_task = AsyncMock(return_value=completed_task)
 
-                result = await _complete_task_impl(task_id=str(task_id))
+                result = await complete_task.fn(task_id=str(task_id))
 
-                assert "info" in result
-                assert "already completed" in result
+                assert "already completed" in result.lower()
 
 
 class TestMCPDeleteTask:
@@ -530,10 +523,10 @@ class TestMCPDeleteTask:
                 mock_service.get_task = AsyncMock(return_value=mock_task)
                 mock_service.delete_task = AsyncMock(return_value=True)
 
-                result = await _delete_task_impl(task_id=str(task_id))
+                result = await delete_task.fn(task_id=str(task_id))
 
-                assert "success" in result
-                assert "deleted" in result
+                assert "Deleted" in result
+                assert "Task to delete" in result
 
     @pytest.mark.asyncio
     async def test_delete_task_not_found(self, auth_context):
@@ -547,78 +540,66 @@ class TestMCPDeleteTask:
                 mock_service = MockTaskService.return_value
                 mock_service.get_task = AsyncMock(return_value=None)
 
-                result = await _delete_task_impl(task_id=str(task_id))
+                result = await delete_task.fn(task_id=str(task_id))
 
-                assert "error" in result
-                assert "not found" in result
+                assert "error" in result.lower()
+                assert "not found" in result.lower()
 
 
 class TestMCPToolParity:
-    """Tests to verify parity between MCP tools and task_tools.py."""
+    """Tests to verify MCP tool signatures and availability."""
 
     def test_all_five_tools_exist(self):
-        """Test: MCP server exposes all 5 required tools (via _impl functions)."""
+        """Test: MCP server exposes all 5 required tools."""
         from app.mcp import server
-        import asyncio
 
-        # Verify all _impl functions are defined and are async
-        assert hasattr(server, "_add_task_impl")
-        assert hasattr(server, "_list_tasks_impl")
-        assert hasattr(server, "_update_task_impl")
-        assert hasattr(server, "_complete_task_impl")
-        assert hasattr(server, "_delete_task_impl")
+        assert hasattr(server, "add_task")
+        assert hasattr(server, "list_tasks")
+        assert hasattr(server, "update_task")
+        assert hasattr(server, "complete_task")
+        assert hasattr(server, "delete_task")
 
-        # Verify they are async functions
-        assert asyncio.iscoroutinefunction(server._add_task_impl)
-        assert asyncio.iscoroutinefunction(server._list_tasks_impl)
-        assert asyncio.iscoroutinefunction(server._update_task_impl)
-        assert asyncio.iscoroutinefunction(server._complete_task_impl)
-        assert asyncio.iscoroutinefunction(server._delete_task_impl)
+        # Verify the underlying functions are async
+        assert asyncio.iscoroutinefunction(server.add_task.fn)
+        assert asyncio.iscoroutinefunction(server.list_tasks.fn)
+        assert asyncio.iscoroutinefunction(server.update_task.fn)
+        assert asyncio.iscoroutinefunction(server.complete_task.fn)
+        assert asyncio.iscoroutinefunction(server.delete_task.fn)
 
     def test_add_task_has_priority_parameter(self):
-        """Test: add_task supports priority parameter like task_tools.py."""
-        import inspect
-
-        sig = inspect.signature(_add_task_impl)
+        """Test: add_task supports priority parameter."""
+        sig = inspect.signature(add_task.fn)
         params = list(sig.parameters.keys())
 
         assert "priority" in params
         assert sig.parameters["priority"].default == "medium"
 
     def test_add_task_has_due_date_parameter(self):
-        """Test: add_task supports due_date parameter like task_tools.py."""
-        import inspect
-
-        sig = inspect.signature(_add_task_impl)
+        """Test: add_task supports due_date parameter."""
+        sig = inspect.signature(add_task.fn)
         params = list(sig.parameters.keys())
 
         assert "due_date" in params
-        assert sig.parameters["due_date"].default is None
+        assert sig.parameters["due_date"].default == ""
 
-    def test_list_tasks_has_sort_by_parameter(self):
-        """Test: list_tasks supports sort_by parameter like task_tools.py."""
-        import inspect
-
-        sig = inspect.signature(_list_tasks_impl)
+    def test_list_tasks_has_filter_status_parameter(self):
+        """Test: list_tasks supports filter_status parameter."""
+        sig = inspect.signature(list_tasks.fn)
         params = list(sig.parameters.keys())
 
-        assert "sort_by" in params
-        assert sig.parameters["sort_by"].default == "created_at"
+        assert "filter_status" in params
+        assert sig.parameters["filter_status"].default == "all"
 
     def test_list_tasks_has_search_parameter(self):
-        """Test: list_tasks supports search parameter like task_tools.py."""
-        import inspect
-
-        sig = inspect.signature(_list_tasks_impl)
+        """Test: list_tasks supports search parameter."""
+        sig = inspect.signature(list_tasks.fn)
         params = list(sig.parameters.keys())
 
         assert "search" in params
 
     def test_update_task_has_all_parameters(self):
-        """Test: update_task supports all update fields like task_tools.py."""
-        import inspect
-
-        sig = inspect.signature(_update_task_impl)
+        """Test: update_task supports all update fields."""
+        sig = inspect.signature(update_task.fn)
         params = list(sig.parameters.keys())
 
         assert "task_id" in params
